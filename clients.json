@@ -33,5 +33,12 @@
     "balance": 15000.0,
     "status": "Attivo",
     "bank": "Banco BPM"
-  }
+  },
+{
+  "code": "FE-00",
+  "name": "Dario Mancini",
+  "balance": 356000.00,
+  "status": "Attivo",
+  "bank": "JPMorgan"
+    }
 ]
