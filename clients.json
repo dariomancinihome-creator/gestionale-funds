@@ -1,0 +1,37 @@
+[
+  {
+    "code": "FE-001",
+    "name": "Mirko Zanardi",
+    "balance": 53743.0,
+    "status": "Attivo",
+    "bank": "Fineco"
+  },
+  {
+    "code": "FE-002",
+    "name": "Bassin Matteo",
+    "balance": 63746.0,
+    "status": "Attivo",
+    "bank": "UniCredit"
+  },
+  {
+    "code": "FE-003",
+    "name": "Borotto Loris",
+    "balance": 27899.78,
+    "status": "Attivo",
+    "bank": "Fideuram"
+  },
+  {
+    "code": "FE-004",
+    "name": "Alessandro Zonato",
+    "balance": 280560.0,
+    "status": "Attivo",
+    "bank": "Intesa Sanpaolo"
+  },
+  {
+    "code": "FE-005",
+    "name": "Roberto Martinelli",
+    "balance": 15000.0,
+    "status": "Attivo",
+    "bank": "Banco BPM"
+  }
+]
