@@ -40,5 +40,11 @@
   "balance": 356000.00,
   "status": "Attivo",
   "bank": "JPMorgan"
-    }
+    },
+"code": "FE-006",
+  "name": "Ettore Salvagno",
+  "balance": 265750.00,
+  "status": "Attivo",
+  "bank": "IFIGEST"  
+  }
 ]
