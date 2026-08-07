@@ -61,5 +61,11 @@
   "balance": 475000.00,
   "status": "Attivo",
   "bank": "IFIGEST "
-  }
+  },
+  {
+   "code": "FE-010",
+  "name": "Ricchini Zeppe",
+  "balance": 6000.00,
+  "status": "Attivo",
+  "bank": "INTESA SAN PAOLO SPA "
     ]
