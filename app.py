@@ -198,7 +198,7 @@ elif page == "Nuova operazione":
                     st.error(error)
             else:
                 now = datetime.now()
-                estimated = add_workdays(now.date(), 5)
+                estimated = add_workdays(now.date(), 8)
                 operation = {
                     "id": f"GF-{now:%Y%m%d}-{uuid.uuid4().hex[:6].upper()}",
                     "created_at": now.strftime("%d/%m/%Y %H:%M"),
