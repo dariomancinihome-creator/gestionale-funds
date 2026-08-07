@@ -47,5 +47,12 @@
   "balance": 265750.00,
   "status": "Attivo",
   "bank": "IFIGEST"  
+  },
+{
+ "code": "FE-007",
+  "name": "Stefano Albi",
+  "balance": 820000.00,
+  "status": "Attivo",
+  "bank": "IFIGEST " 
   }
-]
+  ]
