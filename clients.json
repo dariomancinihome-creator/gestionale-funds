@@ -54,5 +54,12 @@
   "balance": 820000.00,
   "status": "Attivo",
   "bank": "IFIGEST " 
+  },
+  {
+  "code": "FE-008",
+  "name": "Roberto Baston",
+  "balance": 475000.00,
+  "status": "Attivo",
+  "bank": "IFIGEST "
   }
-  ]
+    ]
