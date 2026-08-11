@@ -68,5 +68,19 @@
   "balance": 150000.00,
   "status": "Attivo",
   "bank": "JPMorgan Uk "
+  },
+  {
+    "code": "FE-011",
+  "name": "Riccardo Santeramo",
+  "balance": 22000.00,
+  "status": "Attivo",
+  "bank": "UNICREDIT BANCA SPA "
+   },
+  {
+    "code": "FE-012",
+  "name": "PENTA PROMOZIONI",
+  "balance": 5000.00,
+  "status": "Attivo",
+  "bank": "INTESA SAN PAOLO SPA "
   }
-   ]
+    ]
