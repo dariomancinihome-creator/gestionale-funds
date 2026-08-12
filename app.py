@@ -210,7 +210,7 @@ def position(client, ops):
     associated = float(client["balance"])
     ordered = sum(float(o.get("amount",0) or 0) for o in ops if o.get("status") != "Annullato")
     residual = max(associated - ordered, 0)
-    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","Da aggiornare")]
+    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","Da aggiornare")]
     due_dates = []
     for o in open_ops:
         try:
@@ -389,9 +389,9 @@ if page == "Dashboard":
     a,b,c,d = st.columns(4)
     a.metric("Clienti attivi",len([c for c in clients if c["status"]=="Attivo"]))
     b.metric("Somme associate",euro(sum(float(c["balance"]) for c in clients)))
-    c.metric("Da gestire",sum(1 for o in ops if o.get("status") in ("In elaborazione","Da aggiornare")))
+    c.c.metric("Da gestire",sum(1 for o in ops if o.get("status") in ("In elaborazione","In valuta banca","Da aggiornare")))
     d.metric("Totale ordinato",euro(sum(float(o.get("amount",0) or 0) for o in ops if o.get("status")!="Annullato")))
-    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","Da aggiornare")]
+    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","Da aggiornare")]
     st.markdown("### Operazioni aperte")
     if open_ops:
         st.dataframe([{
@@ -488,7 +488,7 @@ elif page == "Storico":
 
         sid=st.selectbox("Operazione da aggiornare",[o["id"] for o in ops],key="status")
         sop=next(o for o in ops if o["id"]==sid)
-        states=["In elaborazione","Da aggiornare","Accreditato","Completato","Annullato"]
+        states=["In elaborazione","In valuta","Da aggiornare","Accreditato","Completato","Annullato"]
         idx=states.index(sop.get("status")) if sop.get("status") in states else 0
         ns=st.selectbox("Nuovo stato",states,index=idx)
         if st.button("AGGIORNA STATO",use_container_width=True):
