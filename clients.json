@@ -82,5 +82,12 @@
   "balance": 5000.00,
   "status": "Attivo",
   "bank": "INTESA SAN PAOLO SPA "
+  },
+   {
+    "code": "FE-013",
+  "name": "Daniel Angelo De Francesco",
+  "balance": 156000.00,
+  "status": "Attivo",
+  "bank": "BNL SPA"
   }
     ]
