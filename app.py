@@ -206,6 +206,38 @@ def client_login_ok(code, password):
     _, digest = pw_hash(password, salt=access["salt"])
     return secrets.compare_digest(digest, access["password_hash"])
 
+
+def get_messages(client_code):
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/messages",
+        headers=api_headers(),
+        params={
+            "select":"id,client_code,sender,message,created_at",
+            "client_code":f"eq.{client_code}",
+            "order":"created_at.asc"
+        },
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
+
+def send_message(client_code, sender, message):
+    message = (message or "").strip()
+    if not message:
+        return
+    payload = {
+        "client_code": client_code,
+        "sender": sender,
+        "message": message,
+    }
+    r = requests.post(
+        f"{SUPABASE_URL}/rest/v1/messages",
+        headers=api_headers("return=minimal"),
+        json=payload,
+        timeout=15,
+    )
+    r.raise_for_status()
+
 def position(client, ops):
     associated = float(client["balance"])
     ordered = sum(float(o.get("amount",0) or 0) for o in ops if o.get("status") != "Annullato")
@@ -368,6 +400,41 @@ if st.session_state.role == "client":
                            use_container_width=True)
     else:
         st.info("Non risultano operazioni registrate.")
+
+    st.markdown("### Messaggi")
+    st.caption("Scrivi all'amministrazione. La conversazione rimane memorizzata nella cronologia.")
+    try:
+        client_messages = get_messages(code)
+    except Exception as e:
+        st.error("Impossibile caricare i messaggi.")
+        st.caption(str(e))
+        client_messages = []
+
+    if client_messages:
+        for msg in client_messages:
+            role = "user" if msg.get("sender") == "client" else "assistant"
+            label = "Tu" if msg.get("sender") == "client" else "Amministrazione"
+            with st.chat_message(role):
+                st.markdown(f"**{label}** · {pretty_dt(msg.get('created_at'))}")
+                st.write(msg.get("message",""))
+    else:
+        st.info("Nessun messaggio nella conversazione.")
+
+    with st.form("client_message_form", clear_on_submit=True):
+        new_message = st.text_area("Nuovo messaggio", placeholder="Scrivi qui il tuo messaggio...", height=100)
+        send_client_message = st.form_submit_button("INVIA MESSAGGIO", use_container_width=True)
+    if send_client_message:
+        if not new_message.strip():
+            st.warning("Scrivi un messaggio prima di inviare.")
+        else:
+            try:
+                send_message(code, "client", new_message)
+                st.success("Messaggio inviato.")
+                st.rerun()
+            except Exception as e:
+                st.error("Invio non riuscito.")
+                st.caption(str(e))
+
     st.stop()
 
 ops = get_operations()
@@ -376,7 +443,7 @@ if mark_expired(ops):
 
 with st.sidebar:
     st.markdown("## ◈ Gestionale Funds")
-    page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Storico","Accessi clienti"],label_visibility="collapsed")
+    page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Storico","Messaggi","Accessi clienti"],label_visibility="collapsed")
     st.divider()
     st.caption("Area amministratore")
     if st.button("Esci", use_container_width=True):
@@ -497,6 +564,54 @@ elif page == "Storico":
     else:
         st.info("Non risultano operazioni registrate.")
 
+elif page == "Messaggi":
+    st.markdown('<div class="gf-title">Messaggi clienti</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gf-sub">Apri una conversazione FE e rispondi al cliente</div>', unsafe_allow_html=True)
+
+    message_code = st.selectbox(
+        "Cliente",
+        [c["code"] for c in clients],
+        format_func=lambda code: f"{code} · {next((c['name'] for c in clients if c['code'] == code), code)}",
+        key="messages_client_code",
+    )
+    message_client = next((c for c in clients if c["code"] == message_code), None)
+
+    if message_client:
+        st.caption(f"{message_client['name']} · {message_client['bank']}")
+
+    try:
+        thread = get_messages(message_code)
+    except Exception as e:
+        st.error("Impossibile caricare la conversazione.")
+        st.caption(str(e))
+        thread = []
+
+    if thread:
+        for msg in thread:
+            role = "assistant" if msg.get("sender") == "admin" else "user"
+            label = "Amministrazione" if msg.get("sender") == "admin" else message_client["name"]
+            with st.chat_message(role):
+                st.markdown(f"**{label}** · {pretty_dt(msg.get('created_at'))}")
+                st.write(msg.get("message",""))
+    else:
+        st.info("Nessun messaggio per questo cliente.")
+
+    with st.form("admin_message_form", clear_on_submit=True):
+        admin_reply = st.text_area("Rispondi", placeholder="Scrivi la risposta...", height=100)
+        send_admin_reply = st.form_submit_button("INVIA RISPOSTA", use_container_width=True)
+
+    if send_admin_reply:
+        if not admin_reply.strip():
+            st.warning("Scrivi una risposta prima di inviare.")
+        else:
+            try:
+                send_message(message_code, "admin", admin_reply)
+                st.success("Risposta inviata.")
+                st.rerun()
+            except Exception as e:
+                st.error("Invio non riuscito.")
+                st.caption(str(e))
+
 else:
     st.markdown('<div class="gf-title">Accessi clienti</div>', unsafe_allow_html=True)
     st.markdown('<div class="gf-sub">Imposta una password personale per ogni codice FE</div>', unsafe_allow_html=True)
@@ -537,6 +652,4 @@ else:
         else:
             if st.button("RIATTIVA ACCESSO CLIENTE",use_container_width=True):
                 set_client_active(code,True)
-                st.rerun()
-    
-  
+                st.rerun()  
