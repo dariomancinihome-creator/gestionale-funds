@@ -53,6 +53,12 @@ def add_workdays(d, n=5):
             added += 1
     return d
 
+def aml_update_window():
+    today = datetime.now(ROME).date()
+    min_date = add_workdays(today, 2)
+    max_date = add_workdays(today, 3)
+    return min_date, max_date
+
 def admin_password_ok(pw):
     expected = st.secrets.get("APP_PASSWORD", "Funds2026")
     return hashlib.sha256(pw.encode()).hexdigest() == hashlib.sha256(expected.encode()).hexdigest()
@@ -242,7 +248,7 @@ def position(client, ops):
     associated = float(client["balance"])
     ordered = sum(float(o.get("amount",0) or 0) for o in ops if o.get("status") != "Annullato")
     residual = max(associated - ordered, 0)
-    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","Da aggiornare")]
+    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare")]
     due_dates = []
     for o in open_ops:
         try:
@@ -270,6 +276,17 @@ def receipt_pdf(op):
         ["Data prevista di accredito",pretty_date(op.get("estimated_date"))],
         ["Stato",op.get("status","")],
     ]
+
+    if op.get("status") == "In aggiornamento AML":
+        aml_min, aml_max = aml_update_window()
+        rows.extend([
+            ["Motivazione aggiornamento",
+             "Aggiornamento verifiche antiriciclaggio - banca inviante extra SEPA"],
+            ["Tempo stimato", "2-3 giorni lavorativi"],
+            ["Finestra stimata",
+             f"{aml_min.strftime('%d/%m/%Y')} - {aml_max.strftime('%d/%m/%Y')}"],
+        ])
+
     table = Table(rows, colWidths=[150,340])
     table.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F4F7FB")),
@@ -374,6 +391,15 @@ if st.session_state.role == "client":
     if next_due:
         st.info(f"Prossima data prevista: {next_due.strftime('%d/%m/%Y')}")
 
+    aml_ops = [o for o in open_ops if o.get("status") == "In aggiornamento AML"]
+    if aml_ops:
+        aml_min, aml_max = aml_update_window()
+        st.warning(
+            "Aggiornamento verifiche antiriciclaggio – banca inviante extra SEPA\n\n"
+            "**Tempo stimato:** 2–3 giorni lavorativi\n\n"
+            f"**Finestra stimata:** {aml_min.strftime('%d/%m/%Y')} – {aml_max.strftime('%d/%m/%Y')}"
+        )
+
     st.markdown("### Operazioni in corso")
     if open_ops:
         st.dataframe([{
@@ -456,9 +482,9 @@ if page == "Dashboard":
     col1,col2,col3,col4 = st.columns(4)
     col1.metric("Clienti attivi",len([client for client in clients if client["status"]=="Attivo"]))
     col2.metric("Somme associate",euro(sum(float(client["balance"]) for client in clients)))
-    col3.metric("Da gestire",sum(1 for o in ops if o.get("status") in ("In elaborazione","In valuta banca","Da aggiornare")))
+    col3.metric("Da gestire",sum(1 for o in ops if o.get("status") in ("In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare")))
     col4.metric("Totale ordinato",euro(sum(float(o.get("amount",0) or 0) for o in ops if o.get("status")!="Annullato")))
-    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","Da aggiornare")]
+    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare")]
     st.markdown("### Operazioni aperte")
     if open_ops:
         st.dataframe([{
@@ -555,7 +581,7 @@ elif page == "Storico":
 
         sid=st.selectbox("Operazione da aggiornare",[o["id"] for o in ops],key="status")
         sop=next(o for o in ops if o["id"]==sid)
-        states=["In elaborazione","In valuta banca","Da aggiornare","Accreditato","Completato","Annullato"]
+        states=["In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare","Accreditato","Completato","Annullato"]
         idx=states.index(sop.get("status")) if sop.get("status") in states else 0
         ns=st.selectbox("Nuovo stato",states,index=idx)
         if st.button("AGGIORNA STATO",use_container_width=True):
@@ -652,4 +678,5 @@ else:
         else:
             if st.button("RIATTIVA ACCESSO CLIENTE",use_container_width=True):
                 set_client_active(code,True)
-                st.rerun()  
+                st.rerun()
+
