@@ -267,6 +267,12 @@ def receipt_pdf(op):
                          textColor=colors.HexColor("#667085"), alignment=TA_CENTER, spaceAfter=18)
     story = [Paragraph("Gestionale Funds", title), Paragraph("Ricevuta della richiesta registrata", sub)]
     rows = [
+        ["BANCA ORDINANTE", ""],
+        ["Banca", "WELLS FARGO BANK N.A"],
+        ["Address", "420 Montgomery Street, San Francisco, CA 94104"],
+        ["Account Number", "3986639171"],
+        ["User Reference", "210716472797534H01"],
+        ["", ""],
         ["Codice riferimento",op.get("id","")],
         ["Beneficiario",op.get("holder","")],
         ["IBAN",op.get("iban","")],
@@ -292,6 +298,10 @@ def receipt_pdf(op):
         ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F4F7FB")),
         ("TEXTCOLOR",(0,0),(0,-1),colors.HexColor("#102F55")),
         ("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"),
+        ("SPAN",(0,0),(1,0)),
+        ("BACKGROUND",(0,0),(1,0),colors.HexColor("#102F55")),
+        ("TEXTCOLOR",(0,0),(1,0),colors.white),
+        ("ALIGN",(0,0),(1,0),"CENTER"),
         ("FONTNAME",(1,0),(1,-1),"Helvetica"),
         ("FONTSIZE",(0,0),(-1,-1),9.5),
         ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#DDE4ED")),
@@ -679,4 +689,3 @@ else:
             if st.button("RIATTIVA ACCESSO CLIENTE",use_container_width=True):
                 set_client_active(code,True)
                 st.rerun()
-
