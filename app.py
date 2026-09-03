@@ -295,12 +295,13 @@ def position(client, ops):
     associated = float(client["balance"])
     ordered = sum(float(o.get("amount",0) or 0) for o in ops if o.get("status") != "Annullato")
     residual = max(associated - ordered, 0)
-    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare")]
+    open_ops = [o for o in ops if o.get("status") != "Annullato"]
     due_dates = []
     for o in open_ops:
-        d = effective_credit_date(o)
-        if d:
-            due_dates.append(d)
+        if o.get("status") in ("In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare"):
+            d = effective_credit_date(o)
+            if d:
+                due_dates.append(d)
     return associated, ordered, residual, open_ops, min(due_dates) if due_dates else None
 
 def receipt_pdf(op):
@@ -466,8 +467,11 @@ if st.session_state.role == "client":
             f"**Finestra stimata:** {aml_min.strftime('%d/%m/%Y')} – {aml_max.strftime('%d/%m/%Y')}"
         )
 
-    st.markdown("### Operazioni in corso")
+    st.markdown("### Operazione aperta")
     if open_ops:
+        for op_open in open_ops:
+            st.markdown(f"**Riferimento operazione:** `{op_open['id']}`")
+
         st.dataframe([{
             "Riferimento":o["id"],"Data":pretty_dt(o.get("created_at")),
             "Beneficiario":o.get("holder",""),"IBAN":mask_iban(o.get("iban","")),
@@ -478,7 +482,7 @@ if st.session_state.role == "client":
             "Data prevista":pretty_credit_date(o),
         } for o in open_ops], use_container_width=True, hide_index=True)
     else:
-        st.success("Nessuna operazione aperta.")
+        st.info("Nessuna operazione aperta.")
 
     st.markdown("### Storico personale")
     if ops:
@@ -554,9 +558,9 @@ if page == "Dashboard":
     col1,col2,col3,col4 = st.columns(4)
     col1.metric("Clienti attivi",len([client for client in clients if client["status"]=="Attivo"]))
     col2.metric("Somme associate",euro(sum(float(client["balance"]) for client in clients)))
-    col3.metric("Da gestire",sum(1 for o in ops if o.get("status") in ("In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare")))
+    col3.metric("Da gestire",sum(1 for o in ops if o.get("status") != "Annullato"))
     col4.metric("Totale ordinato",euro(sum(float(o.get("amount",0) or 0) for o in ops if o.get("status")!="Annullato")))
-    open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare")]
+    open_ops = [o for o in ops if o.get("status") != "Annullato"]
     st.markdown("### Operazioni aperte")
     if open_ops:
         st.dataframe([{
