@@ -100,6 +100,27 @@ def parse_date_or_today(value):
     except Exception:
         return datetime.now(ROME).date()
 
+def effective_credit_date(op):
+    base_value = op.get("value_date_to") or op.get("value_date_from")
+    if base_value:
+        try:
+            return date.fromisoformat(str(base_value)[:10]) + timedelta(days=1)
+        except Exception:
+            pass
+
+    estimated = op.get("estimated_date")
+    if estimated:
+        try:
+            return date.fromisoformat(str(estimated)[:10])
+        except Exception:
+            pass
+
+    return None
+
+def pretty_credit_date(op):
+    d = effective_credit_date(op)
+    return d.strftime("%d/%m/%Y") if d else ""
+
 def get_operations(client_code=None):
     params = {"select":"*", "order":"created_at.desc"}
     if client_code:
@@ -144,6 +165,12 @@ def update_status(op_id, status, comment=None, value_date_from=None, value_date_
 
     if value_date_to is not None:
         payload["value_date_to"] = value_date_to.isoformat() if hasattr(value_date_to, "isoformat") else value_date_to
+
+    credit_base = value_date_to if value_date_to is not None else value_date_from
+    if credit_base is not None:
+        if isinstance(credit_base, str):
+            credit_base = date.fromisoformat(credit_base[:10])
+        payload["estimated_date"] = (credit_base + timedelta(days=1)).isoformat()
 
     if status in ("Accreditato","Completato"):
         payload["completed_at"] = datetime.now(timezone.utc).isoformat()
@@ -271,10 +298,9 @@ def position(client, ops):
     open_ops = [o for o in ops if o.get("status") in ("In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare")]
     due_dates = []
     for o in open_ops:
-        try:
-            due_dates.append(date.fromisoformat(o["estimated_date"][:10]))
-        except Exception:
-            pass
+        d = effective_credit_date(o)
+        if d:
+            due_dates.append(d)
     return associated, ordered, residual, open_ops, min(due_dates) if due_dates else None
 
 def receipt_pdf(op):
@@ -299,7 +325,7 @@ def receipt_pdf(op):
         ["Importo",euro(op.get("amount",0))],
         ["Causale",op.get("reason","")],
         ["Data richiesta",pretty_dt(op.get("created_at"))],
-        ["Data prevista di accredito",pretty_date(op.get("estimated_date"))],
+        ["Data prevista di accredito",pretty_credit_date(op)],
         ["Stato",op.get("status","")],
     ]
 
@@ -449,7 +475,7 @@ if st.session_state.role == "client":
             "Valuta da":pretty_date(o.get("value_date_from")),
             "Valuta a":pretty_date(o.get("value_date_to")),
             "Commento":o.get("status_comment",""),
-            "Data prevista":pretty_date(o.get("estimated_date")),
+            "Data prevista":pretty_credit_date(o),
         } for o in open_ops], use_container_width=True, hide_index=True)
     else:
         st.success("Nessuna operazione aperta.")
@@ -463,7 +489,7 @@ if st.session_state.role == "client":
             "Valuta da":pretty_date(o.get("value_date_from")),
             "Valuta a":pretty_date(o.get("value_date_to")),
             "Commento":o.get("status_comment",""),
-            "Data prevista":pretty_date(o.get("estimated_date")),
+            "Data prevista":pretty_credit_date(o),
         } for o in ops], use_container_width=True, hide_index=True)
         rid = st.selectbox("Ricevuta da scaricare",[o["id"] for o in ops])
         rop = next(o for o in ops if o["id"] == rid)
@@ -539,7 +565,7 @@ if page == "Dashboard":
             "Valuta da":pretty_date(o.get("value_date_from")),
             "Valuta a":pretty_date(o.get("value_date_to")),
             "Commento":o.get("status_comment",""),
-            "Data prevista":pretty_date(o.get("estimated_date"))
+            "Data prevista":pretty_credit_date(o)
         } for o in open_ops],use_container_width=True,hide_index=True)
     else:
         st.success("Nessuna operazione aperta.")
@@ -621,7 +647,7 @@ elif page == "Storico":
         st.dataframe([{
             "ID":o["id"],"Data":pretty_dt(o.get("created_at")),"Codice":o["client_code"],
             "Cliente":o["client_name"],"Beneficiario":o.get("holder",""),"IBAN":mask_iban(o.get("iban","")),
-            "Importo":euro(o["amount"]),"Stato":o["status"],"Data prevista":pretty_date(o.get("estimated_date"))
+            "Importo":euro(o["amount"]),"Stato":o["status"],"Data prevista":pretty_credit_date(o)
         } for o in filtered],use_container_width=True,hide_index=True)
 
         rid=st.selectbox("Ricevuta operazione",[o["id"] for o in ops],key="receipt")
@@ -760,4 +786,3 @@ else:
             if st.button("RIATTIVA ACCESSO CLIENTE",use_container_width=True):
                 set_client_active(code,True)
                 st.rerun()
-
