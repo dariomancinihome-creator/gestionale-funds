@@ -94,6 +94,12 @@ def pretty_date(value):
     except Exception:
         return str(value or "")
 
+def parse_date_or_today(value):
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except Exception:
+        return datetime.now(ROME).date()
+
 def get_operations(client_code=None):
     params = {"select":"*", "order":"created_at.desc"}
     if client_code:
@@ -124,10 +130,24 @@ def insert_operation(payload):
     data = r.json()
     return data[0] if data else payload
 
-def update_status(op_id, status):
-    payload = {"status":status}
+def update_status(op_id, status, comment=None, value_date_from=None, value_date_to=None):
+    payload = {
+        "status": status,
+        "status_updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if comment is not None:
+        payload["status_comment"] = comment.strip() or None
+
+    if value_date_from is not None:
+        payload["value_date_from"] = value_date_from.isoformat() if hasattr(value_date_from, "isoformat") else value_date_from
+
+    if value_date_to is not None:
+        payload["value_date_to"] = value_date_to.isoformat() if hasattr(value_date_to, "isoformat") else value_date_to
+
     if status in ("Accreditato","Completato"):
         payload["completed_at"] = datetime.now(timezone.utc).isoformat()
+
     r = requests.patch(
         f"{SUPABASE_URL}/rest/v1/operations",
         headers=api_headers("return=minimal"),
@@ -283,6 +303,16 @@ def receipt_pdf(op):
         ["Stato",op.get("status","")],
     ]
 
+    if op.get("value_date_from") or op.get("value_date_to"):
+        if op.get("value_date_from") and op.get("value_date_to") and op.get("value_date_from") != op.get("value_date_to"):
+            value_text = f"{pretty_date(op.get('value_date_from'))} - {pretty_date(op.get('value_date_to'))}"
+        else:
+            value_text = pretty_date(op.get("value_date_from") or op.get("value_date_to"))
+        rows.append(["Valuta", value_text])
+
+    if op.get("status_comment"):
+        rows.append(["Commento stato", op.get("status_comment")])
+
     if op.get("status") == "In aggiornamento AML":
         aml_min, aml_max = aml_update_window()
         rows.extend([
@@ -416,6 +446,9 @@ if st.session_state.role == "client":
             "Riferimento":o["id"],"Data":pretty_dt(o.get("created_at")),
             "Beneficiario":o.get("holder",""),"IBAN":mask_iban(o.get("iban","")),
             "Importo":euro(o["amount"]),"Stato":o["status"],
+            "Valuta da":pretty_date(o.get("value_date_from")),
+            "Valuta a":pretty_date(o.get("value_date_to")),
+            "Commento":o.get("status_comment",""),
             "Data prevista":pretty_date(o.get("estimated_date")),
         } for o in open_ops], use_container_width=True, hide_index=True)
     else:
@@ -427,6 +460,9 @@ if st.session_state.role == "client":
             "Riferimento":o["id"],"Data":pretty_dt(o.get("created_at")),
             "Beneficiario":o.get("holder",""),"IBAN":mask_iban(o.get("iban","")),
             "Importo":euro(o["amount"]),"Stato":o["status"],
+            "Valuta da":pretty_date(o.get("value_date_from")),
+            "Valuta a":pretty_date(o.get("value_date_to")),
+            "Commento":o.get("status_comment",""),
             "Data prevista":pretty_date(o.get("estimated_date")),
         } for o in ops], use_container_width=True, hide_index=True)
         rid = st.selectbox("Ricevuta da scaricare",[o["id"] for o in ops])
@@ -499,7 +535,11 @@ if page == "Dashboard":
     if open_ops:
         st.dataframe([{
             "ID":o["id"],"Data":pretty_dt(o.get("created_at")),"Cliente":o["client_name"],
-            "Importo":euro(o["amount"]),"Stato":o["status"],"Data prevista":pretty_date(o.get("estimated_date"))
+            "Importo":euro(o["amount"]),"Stato":o["status"],
+            "Valuta da":pretty_date(o.get("value_date_from")),
+            "Valuta a":pretty_date(o.get("value_date_to")),
+            "Commento":o.get("status_comment",""),
+            "Data prevista":pretty_date(o.get("estimated_date"))
         } for o in open_ops],use_container_width=True,hide_index=True)
     else:
         st.success("Nessuna operazione aperta.")
@@ -589,14 +629,45 @@ elif page == "Storico":
         st.download_button("SCARICA RICEVUTA PDF",receipt_pdf(rop),file_name=f"ricevuta_{rid}.pdf",
                            mime="application/pdf",use_container_width=True)
 
+        st.markdown("### Aggiorna stato, commento e valuta")
         sid=st.selectbox("Operazione da aggiornare",[o["id"] for o in ops],key="status")
         sop=next(o for o in ops if o["id"]==sid)
+
         states=["In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare","Accreditato","Completato","Annullato"]
         idx=states.index(sop.get("status")) if sop.get("status") in states else 0
-        ns=st.selectbox("Nuovo stato",states,index=idx)
-        if st.button("AGGIORNA STATO",use_container_width=True):
-            update_status(sid,ns)
-            st.rerun()
+
+        with st.form("status_update_form"):
+            ns=st.selectbox("Nuovo stato",states,index=idx)
+
+            status_comment=st.text_area(
+                "Commento",
+                value=sop.get("status_comment") or "",
+                placeholder="Inserisci una nota visibile anche al cliente...",
+                height=100,
+            )
+
+            col_val_1, col_val_2 = st.columns(2)
+            default_from = parse_date_or_today(sop.get("value_date_from") or sop.get("estimated_date"))
+            default_to = parse_date_or_today(sop.get("value_date_to") or sop.get("estimated_date"))
+
+            value_from = col_val_1.date_input("Valuta da", value=default_from)
+            value_to = col_val_2.date_input("Valuta a", value=default_to)
+
+            save_status = st.form_submit_button("AGGIORNA STATO",use_container_width=True)
+
+        if save_status:
+            if value_to < value_from:
+                st.error("La data 'Valuta a' non può essere precedente a 'Valuta da'.")
+            else:
+                update_status(
+                    sid,
+                    ns,
+                    comment=status_comment,
+                    value_date_from=value_from,
+                    value_date_to=value_to,
+                )
+                st.success("Stato, commento e date di valuta aggiornati.")
+                st.rerun()
     else:
         st.info("Non risultano operazioni registrate.")
 
@@ -689,3 +760,4 @@ else:
             if st.button("RIATTIVA ACCESSO CLIENTE",use_container_width=True):
                 set_client_active(code,True)
                 st.rerun()
+
