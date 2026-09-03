@@ -89,5 +89,13 @@
   "balance": 156000.00,
   "status": "Attivo",
   "bank": "BNL SPA"
+  },
+   {
+    "code": "FE-014",
+  "name": "Cinquetti Caterina",
+  "balance": 5000.00,
+  "status": "Attivo",
+  "bank": "Banco BPM S.P.A"
   }
     ]
+    
