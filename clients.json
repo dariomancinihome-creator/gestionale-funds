@@ -96,6 +96,13 @@
   "balance": 5000.00,
   "status": "Attivo",
   "bank": "Banco BPM S.P.A"
+   },
+  {
+    "code": "FE-015",
+  "name": "Zonato Alessandro",
+  "balance": 279560.00,
+  "status": "Attivo",
+  "bank": "Intesa San Paolo S.P.A"
   }
     ]
     
