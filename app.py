@@ -291,6 +291,39 @@ def send_message(client_code, sender, message):
     )
     r.raise_for_status()
 
+def get_portfolio(client_code):
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/investment_portfolios",
+        headers=api_headers(),
+        params={"select":"*", "client_code":f"eq.{client_code}", "limit":1},
+        timeout=15,
+    )
+    r.raise_for_status()
+    data = r.json()
+    return data[0] if data else None
+
+def save_portfolio(client_code, asset, initial_capital, return_value, debt_payment,
+                   available_funds, payment_due_date, next_payment_date):
+    payload = {
+        "client_code": client_code,
+        "asset": (asset or "").strip(),
+        "initial_capital": round(float(initial_capital or 0), 2),
+        "return_value": round(float(return_value or 0), 2),
+        "debt_payment": round(float(debt_payment or 0), 2),
+        "available_funds": round(float(available_funds or 0), 2),
+        "payment_due_date": payment_due_date.isoformat() if payment_due_date else None,
+        "next_payment_date": next_payment_date.isoformat() if next_payment_date else None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    r = requests.post(
+        f"{SUPABASE_URL}/rest/v1/investment_portfolios",
+        headers=api_headers("resolution=merge-duplicates,return=minimal"),
+        params={"on_conflict":"client_code"},
+        json=payload,
+        timeout=15,
+    )
+    r.raise_for_status()
+
 def position(client, ops):
     associated = float(client["balance"])
     ordered = sum(float(o.get("amount",0) or 0) for o in ops if o.get("status") != "Annullato")
@@ -320,6 +353,31 @@ def receipt_pdf(op):
         ["Account Number", "3986639171"],
         ["User Reference", "210716472797534H01"],
         ["", ""],
+    ]
+
+    try:
+        portfolio = get_portfolio(op.get("client_code"))
+    except Exception:
+        portfolio = None
+
+    if portfolio:
+        rows.extend([
+            ["PORTAFOGLIO INVESTIMENTI", ""],
+            ["Asset", portfolio.get("asset","")],
+            ["Capitale iniziale", euro(portfolio.get("initial_capital",0))],
+            ["Rendita", euro(portfolio.get("return_value",0))],
+            ["Liquidità / Fondi disponibili", euro(portfolio.get("available_funds",0))],
+            ["Totale portafoglio", euro(
+                float(portfolio.get("initial_capital",0) or 0) +
+                float(portfolio.get("available_funds",0) or 0)
+            )],
+            ["Quota versamento a debito", euro(portfolio.get("debt_payment",0))],
+            ["Data scadenza versamento", pretty_date(portfolio.get("payment_due_date"))],
+            ["Prossima data versamento", pretty_date(portfolio.get("next_payment_date"))],
+            ["", ""],
+        ])
+
+    rows.extend([
         ["Codice riferimento",op.get("id","")],
         ["Beneficiario",op.get("holder","")],
         ["IBAN",op.get("iban","")],
@@ -328,7 +386,7 @@ def receipt_pdf(op):
         ["Data richiesta",pretty_dt(op.get("created_at"))],
         ["Data prevista di accredito",pretty_credit_date(op)],
         ["Stato",op.get("status","")],
-    ]
+    ])
 
     if op.get("value_date_from") or op.get("value_date_to"):
         if op.get("value_date_from") and op.get("value_date_to") and op.get("value_date_from") != op.get("value_date_to"):
@@ -350,8 +408,9 @@ def receipt_pdf(op):
              f"{aml_min.strftime('%d/%m/%Y')} - {aml_max.strftime('%d/%m/%Y')}"],
         ])
 
+    portfolio_header_row = next((i for i, row in enumerate(rows) if row and row[0] == "PORTAFOGLIO INVESTIMENTI"), None)
     table = Table(rows, colWidths=[150,340])
-    table.setStyle(TableStyle([
+    base_style = [
         ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F4F7FB")),
         ("TEXTCOLOR",(0,0),(0,-1),colors.HexColor("#102F55")),
         ("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"),
@@ -364,7 +423,16 @@ def receipt_pdf(op):
         ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#DDE4ED")),
         ("VALIGN",(0,0),(-1,-1),"TOP"),
         ("PADDING",(0,0),(-1,-1),8),
-    ]))
+    ]
+    if portfolio_header_row is not None:
+        base_style.extend([
+            ("SPAN",(0,portfolio_header_row),(1,portfolio_header_row)),
+            ("BACKGROUND",(0,portfolio_header_row),(1,portfolio_header_row),colors.HexColor("#102F55")),
+            ("TEXTCOLOR",(0,portfolio_header_row),(1,portfolio_header_row),colors.white),
+            ("ALIGN",(0,portfolio_header_row),(1,portfolio_header_row),"CENTER"),
+            ("FONTNAME",(0,portfolio_header_row),(1,portfolio_header_row),"Helvetica-Bold"),
+        ])
+    table.setStyle(TableStyle(base_style))
     story += [table, Spacer(1,10), Paragraph("Data e ora visualizzate secondo il fuso Europe/Rome.", styles["Normal"])]
     doc.build(story)
     return buf.getvalue()
@@ -503,6 +571,29 @@ if st.session_state.role == "client":
     else:
         st.info("Non risultano operazioni registrate.")
 
+    st.markdown("### Portafoglio investimenti")
+    try:
+        portfolio = get_portfolio(code)
+    except Exception:
+        portfolio = None
+
+    if portfolio:
+        p1,p2,p3,p4 = st.columns(4)
+        p1.metric("Capitale iniziale", euro(portfolio.get("initial_capital",0)))
+        p2.metric("Rendita", euro(portfolio.get("return_value",0)))
+        p3.metric("Fondi disponibili", euro(portfolio.get("available_funds",0)))
+        portfolio_total = (
+            float(portfolio.get("initial_capital",0) or 0) +
+            float(portfolio.get("available_funds",0) or 0)
+        )
+        p4.metric("Totale", euro(portfolio_total))
+        st.write(f"**Asset:** {portfolio.get('asset','')}")
+        st.write(f"**Quota versamento a debito:** {euro(portfolio.get('debt_payment',0))}")
+        st.write(f"**Data scadenza versamento:** {pretty_date(portfolio.get('payment_due_date'))}")
+        st.write(f"**Prossima data versamento:** {pretty_date(portfolio.get('next_payment_date'))}")
+    else:
+        st.info("Portafoglio investimenti non ancora configurato.")
+
     st.markdown("### Messaggi")
     st.caption("Scrivi all'amministrazione. La conversazione rimane memorizzata nella cronologia.")
     try:
@@ -545,7 +636,7 @@ if mark_expired(ops):
 
 with st.sidebar:
     st.markdown("## ◈ Gestionale Funds")
-    page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Storico","Messaggi","Accessi clienti"],label_visibility="collapsed")
+    page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Portafoglio investimenti","Storico","Messaggi","Accessi clienti"],label_visibility="collapsed")
     st.divider()
     st.caption("Area amministratore")
     if st.button("Esci", use_container_width=True):
@@ -642,6 +733,61 @@ elif page == "Clienti":
                      "Somma associata":euro(a),"Ordinato":euro(o),"Residuo":euro(r),
                      "Aperte":len(opened),"Stato":c["status"]})
     st.dataframe(rows,use_container_width=True,hide_index=True)
+
+elif page == "Portafoglio investimenti":
+    st.markdown('<div class="gf-title">Portafoglio investimenti</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gf-sub">Dati compilabili esclusivamente dall’amministratore</div>', unsafe_allow_html=True)
+
+    pcode = st.selectbox(
+        "Cliente",
+        [c["code"] for c in clients],
+        format_func=lambda code: f"{code} · {next((c['name'] for c in clients if c['code'] == code), code)}",
+        key="portfolio_client",
+    )
+    try:
+        current_portfolio = get_portfolio(pcode)
+    except Exception as e:
+        st.error("Prima esegui lo script SQL del Portafoglio investimenti su Supabase.")
+        st.caption(str(e))
+        st.stop()
+
+    with st.form("portfolio_form"):
+        asset = st.text_input("Asset", value=(current_portfolio or {}).get("asset",""))
+        c1,c2,c3 = st.columns(3)
+        initial_capital = c1.number_input("Capitale iniziale", min_value=0.0,
+            value=float((current_portfolio or {}).get("initial_capital",0) or 0), step=100.0)
+        return_value = c2.number_input("Rendita", min_value=0.0,
+            value=float((current_portfolio or {}).get("return_value",0) or 0), step=10.0)
+        debt_payment = c3.number_input("Quota versamento a debito", min_value=0.0,
+            value=float((current_portfolio or {}).get("debt_payment",0) or 0), step=10.0)
+
+        available_funds = st.number_input(
+            "Liquidità / Fondi disponibili",
+            min_value=0.0,
+            value=float((current_portfolio or {}).get("available_funds",0) or 0),
+            step=100.0
+        )
+        portfolio_total = float(initial_capital) + float(available_funds)
+        st.metric("Totale portafoglio (Fondi disponibili + Capitale iniziale)", euro(portfolio_total))
+
+        d1,d2 = st.columns(2)
+        due_default = parse_date_or_today((current_portfolio or {}).get("payment_due_date"))
+        next_default = parse_date_or_today((current_portfolio or {}).get("next_payment_date"))
+        payment_due_date = d1.date_input("Data scadenza versamento", value=due_default)
+        next_payment_date = d2.date_input("Prossima data versamento", value=next_default)
+
+        save_pf = st.form_submit_button("SALVA PORTAFOGLIO", use_container_width=True)
+
+    if save_pf:
+        if not asset.strip():
+            st.error("Inserisci l’asset.")
+        else:
+            save_portfolio(
+                pcode, asset, initial_capital, return_value, debt_payment,
+                available_funds, payment_due_date, next_payment_date
+            )
+            st.success(f"Portafoglio {pcode} aggiornato.")
+            st.rerun()
 
 elif page == "Storico":
     st.markdown('<div class="gf-title">Storico operazioni</div>', unsafe_allow_html=True)
@@ -790,3 +936,6 @@ else:
             if st.button("RIATTIVA ACCESSO CLIENTE",use_container_width=True):
                 set_client_active(code,True)
                 st.rerun()
+
+
+
