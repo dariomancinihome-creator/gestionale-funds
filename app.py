@@ -7,7 +7,7 @@ from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
 
 st.set_page_config(page_title="Gestionale Funds", page_icon="◈", layout="wide")
@@ -926,6 +926,12 @@ elif page == "Nuova operazione":
                 x2.text_input("Importo selezionato",euro(amount),disabled=True)
                 y2.text_input("Residuo previsto",euro(residual-float(amount)),disabled=True)
                 reason = st.text_input("Causale")
+                value_date = st.date_input(
+                    "Data valuta prevista",
+                    value=datetime.now(ROME).date(),
+                    format="DD/MM/YYYY",
+                    help="La data richiesta viene registrata automaticamente. La data prevista di accredito sarà il giorno successivo alla data valuta."
+                )
                 confirm = st.checkbox("Confermo i dati inseriti")
                 send = st.form_submit_button("INVIA",use_container_width=True)
             if send:
@@ -942,8 +948,10 @@ elif page == "Nuova operazione":
                         "id":f"GF-{now:%Y%m%d}-{uuid.uuid4().hex[:6].upper()}",
                         "client_code":client["code"],"client_name":client["name"],"bank":client["bank"],
                         "holder":holder.strip(),"iban":clean_iban(iban),"amount":round(float(amount),2),
-                        "reason":reason.strip(),"status":"In elaborazione",
-                        "estimated_date":add_workdays(now.date(),5).isoformat(),
+                        "reason":reason.strip(),"status":"Pagamento eseguito",
+                        "value_date_from":value_date.isoformat(),
+                        "value_date_to":value_date.isoformat(),
+                        "estimated_date":(value_date + timedelta(days=1)).isoformat(),
                     })
                     st.session_state.last_operation_id = saved["id"]
                     st.rerun()
