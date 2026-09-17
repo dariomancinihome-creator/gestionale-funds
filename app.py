@@ -291,6 +291,42 @@ def send_message(client_code, sender, message):
     )
     r.raise_for_status()
 
+
+def get_operation_updates(operation_id=None, client_code=None):
+    params = {
+        "select":"id,operation_id,client_code,update_text,created_at",
+        "order":"created_at.desc"
+    }
+    if operation_id:
+        params["operation_id"] = f"eq.{operation_id}"
+    if client_code:
+        params["client_code"] = f"eq.{client_code}"
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/operation_updates",
+        headers=api_headers(),
+        params=params,
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
+
+def add_operation_update(operation_id, client_code, update_text):
+    update_text = (update_text or "").strip()
+    if not update_text:
+        return
+    payload = {
+        "operation_id": operation_id,
+        "client_code": client_code,
+        "update_text": update_text,
+    }
+    r = requests.post(
+        f"{SUPABASE_URL}/rest/v1/operation_updates",
+        headers=api_headers("return=minimal"),
+        json=payload,
+        timeout=15,
+    )
+    r.raise_for_status()
+
 def get_portfolio(client_code):
     r = requests.get(
         f"{SUPABASE_URL}/rest/v1/investment_portfolios",
@@ -386,6 +422,7 @@ def receipt_pdf(op):
         ["Data richiesta",pretty_dt(op.get("created_at"))],
         ["Data prevista di accredito",pretty_credit_date(op)],
         ["Stato",op.get("status","")],
+        ["Data completamento", pretty_date(op.get("completed_at")) if op.get("completed_at") else "—"],
     ])
 
     if op.get("value_date_from") or op.get("value_date_to"):
@@ -408,7 +445,25 @@ def receipt_pdf(op):
              f"{aml_min.strftime('%d/%m/%Y')} - {aml_max.strftime('%d/%m/%Y')}"],
         ])
 
+    try:
+        receipt_updates = get_operation_updates(operation_id=op.get("id"))
+    except Exception:
+        receipt_updates = []
+
+    if receipt_updates:
+        rows.extend([
+            ["", ""],
+            ["AGGIORNAMENTI STATO DA WELLS FARGO", ""],
+            ["Nota", "Registro delle comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente."],
+        ])
+        for upd in reversed(receipt_updates):
+            rows.append([
+                pretty_dt(upd.get("created_at")),
+                upd.get("update_text","")
+            ])
+
     portfolio_header_row = next((i for i, row in enumerate(rows) if row and row[0] == "PORTAFOGLIO INVESTIMENTI"), None)
+    updates_header_row = next((i for i, row in enumerate(rows) if row and row[0] == "AGGIORNAMENTI STATO DA WELLS FARGO"), None)
     table = Table(rows, colWidths=[150,340])
     base_style = [
         ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F4F7FB")),
@@ -431,6 +486,14 @@ def receipt_pdf(op):
             ("TEXTCOLOR",(0,portfolio_header_row),(1,portfolio_header_row),colors.white),
             ("ALIGN",(0,portfolio_header_row),(1,portfolio_header_row),"CENTER"),
             ("FONTNAME",(0,portfolio_header_row),(1,portfolio_header_row),"Helvetica-Bold"),
+        ])
+    if updates_header_row is not None:
+        base_style.extend([
+            ("SPAN",(0,updates_header_row),(1,updates_header_row)),
+            ("BACKGROUND",(0,updates_header_row),(1,updates_header_row),colors.HexColor("#102F55")),
+            ("TEXTCOLOR",(0,updates_header_row),(1,updates_header_row),colors.white),
+            ("ALIGN",(0,updates_header_row),(1,updates_header_row),"CENTER"),
+            ("FONTNAME",(0,updates_header_row),(1,updates_header_row),"Helvetica-Bold"),
         ])
     table.setStyle(TableStyle(base_style))
     story += [table, Spacer(1,10), Paragraph("Data e ora visualizzate secondo il fuso Europe/Rome.", styles["Normal"])]
@@ -535,41 +598,55 @@ if st.session_state.role == "client":
             f"**Finestra stimata:** {aml_min.strftime('%d/%m/%Y')} – {aml_max.strftime('%d/%m/%Y')}"
         )
 
-    st.markdown("### Operazione aperta")
-    if open_ops:
-        for op_open in open_ops:
-            st.markdown(f"**Riferimento operazione:** `{op_open['id']}`")
-
-        st.dataframe([{
-            "Riferimento":o["id"],"Data":pretty_dt(o.get("created_at")),
-            "Beneficiario":o.get("holder",""),"IBAN":mask_iban(o.get("iban","")),
-            "Importo":euro(o["amount"]),"Stato":o["status"],
-            "Valuta da":pretty_date(o.get("value_date_from")),
-            "Valuta a":pretty_date(o.get("value_date_to")),
-            "Commento":o.get("status_comment",""),
-            "Data prevista":pretty_credit_date(o),
-        } for o in open_ops], use_container_width=True, hide_index=True)
-    else:
-        st.info("Nessuna operazione aperta.")
-
-    st.markdown("### Storico personale")
+    st.markdown("### Le mie transazioni")
     if ops:
         st.dataframe([{
-            "Riferimento":o["id"],"Data":pretty_dt(o.get("created_at")),
-            "Beneficiario":o.get("holder",""),"IBAN":mask_iban(o.get("iban","")),
-            "Importo":euro(o["amount"]),"Stato":o["status"],
-            "Valuta da":pretty_date(o.get("value_date_from")),
-            "Valuta a":pretty_date(o.get("value_date_to")),
-            "Commento":o.get("status_comment",""),
-            "Data prevista":pretty_credit_date(o),
+            "Data": pretty_date(o.get("completed_at") or o.get("created_at")),
+            "Importo": euro(o["amount"]),
+            "Stato": "Pagamento eseguito" if o.get("status") == "Pagamento eseguito" else o.get("status",""),
+            "Data completamento": pretty_date(o.get("completed_at")) if o.get("completed_at") else "—",
         } for o in ops], use_container_width=True, hide_index=True)
-        rid = st.selectbox("Ricevuta da scaricare",[o["id"] for o in ops])
+
+        rid = st.selectbox(
+            "Ricevuta da scaricare",
+            [o["id"] for o in ops],
+            format_func=lambda oid: next(
+                (f"{o.get('client_name','')} · {euro(o.get('amount',0))} · {pretty_date(o.get('completed_at') or o.get('created_at'))}"
+                 for o in ops if o["id"] == oid),
+                oid
+            ),
+        )
         rop = next(o for o in ops if o["id"] == rid)
-        st.download_button("SCARICA RICEVUTA PDF", receipt_pdf(rop),
-                           file_name=f"ricevuta_{rid}.pdf", mime="application/pdf",
-                           use_container_width=True)
+        st.download_button(
+            "SCARICA RICEVUTA PDF",
+            receipt_pdf(rop),
+            file_name=f"ricevuta_{rid}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
     else:
-        st.info("Non risultano operazioni registrate.")
+        st.info("Non risultano transazioni registrate.")
+
+    st.markdown("### Aggiornamenti sulla mia operazione")
+    st.caption("Registro delle comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente.")
+    try:
+        client_updates = get_operation_updates(client_code=code)
+    except Exception:
+        client_updates = []
+
+    if client_updates:
+        op_map = {o["id"]: o for o in ops}
+        for upd in client_updates:
+            linked = op_map.get(upd.get("operation_id"), {})
+            st.markdown(
+                f"**{pretty_dt(upd.get('created_at'))}**  \\n"
+                f"{upd.get('update_text','')}  \\n"
+                f"<small>{euro(linked.get('amount',0)) if linked else ''}</small>",
+                unsafe_allow_html=True
+            )
+            st.divider()
+    else:
+        st.info("Nessun aggiornamento amministrativo disponibile.")
 
     st.markdown("### Portafoglio investimenti")
     try:
@@ -636,7 +713,7 @@ if mark_expired(ops):
 
 with st.sidebar:
     st.markdown("## ◈ Gestionale Funds")
-    page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Portafoglio investimenti","Storico","Messaggi","Accessi clienti"],label_visibility="collapsed")
+    page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Portafoglio investimenti","Storico transazioni","Aggiornamenti stato da Wells Fargo","Messaggi","Accessi clienti"],label_visibility="collapsed")
     st.divider()
     st.caption("Area amministratore")
     if st.button("Esci", use_container_width=True):
@@ -789,63 +866,101 @@ elif page == "Portafoglio investimenti":
             st.success(f"Portafoglio {pcode} aggiornato.")
             st.rerun()
 
-elif page == "Storico":
-    st.markdown('<div class="gf-title">Storico operazioni</div>', unsafe_allow_html=True)
+elif page == "Storico transazioni":
+    st.markdown('<div class="gf-title">Storico transazioni</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gf-sub">Elenco delle operazioni registrate e concluse</div>', unsafe_allow_html=True)
+
     if ops:
-        q=st.text_input("Cerca per cliente, codice o ID").strip().lower()
-        filtered=ops if not q else [o for o in ops if q in o["client_name"].lower() or q in o["client_code"].lower() or q in o["id"].lower()]
+        q = st.text_input("Cerca per nome e cognome").strip().lower()
+        filtered = ops if not q else [
+            o for o in ops if q in (o.get("client_name") or "").lower()
+        ]
+
         st.dataframe([{
-            "ID":o["id"],"Data":pretty_dt(o.get("created_at")),"Codice":o["client_code"],
-            "Cliente":o["client_name"],"Beneficiario":o.get("holder",""),"IBAN":mask_iban(o.get("iban","")),
-            "Importo":euro(o["amount"]),"Stato":o["status"],"Data prevista":pretty_credit_date(o)
-        } for o in filtered],use_container_width=True,hide_index=True)
+            "Data": pretty_date(o.get("completed_at") or o.get("created_at")),
+            "Cliente": o.get("client_name",""),
+            "Importo": euro(o.get("amount",0)),
+            "Stato finale": "Pagamento eseguito" if o.get("status") == "Pagamento eseguito" else o.get("status",""),
+            "Data completamento": pretty_date(o.get("completed_at")) if o.get("completed_at") else "—",
+        } for o in filtered], use_container_width=True, hide_index=True)
 
-        rid=st.selectbox("Ricevuta operazione",[o["id"] for o in ops],key="receipt")
-        rop=next(o for o in ops if o["id"]==rid)
-        st.download_button("SCARICA RICEVUTA PDF",receipt_pdf(rop),file_name=f"ricevuta_{rid}.pdf",
-                           mime="application/pdf",use_container_width=True)
-
-        st.markdown("### Aggiorna stato, commento e valuta")
-        sid=st.selectbox("Operazione da aggiornare",[o["id"] for o in ops],key="status")
-        sop=next(o for o in ops if o["id"]==sid)
-
-        states=["In elaborazione","In valuta banca","In aggiornamento AML","Da aggiornare","Accreditato","Completato","Annullato"]
-        idx=states.index(sop.get("status")) if sop.get("status") in states else 0
-
-        with st.form("status_update_form"):
-            ns=st.selectbox("Nuovo stato",states,index=idx)
-
-            status_comment=st.text_area(
-                "Commento",
-                value=sop.get("status_comment") or "",
-                placeholder="Inserisci una nota visibile anche al cliente...",
-                height=100,
-            )
-
-            col_val_1, col_val_2 = st.columns(2)
-            default_from = parse_date_or_today(sop.get("value_date_from") or sop.get("estimated_date"))
-            default_to = parse_date_or_today(sop.get("value_date_to") or sop.get("estimated_date"))
-
-            value_from = col_val_1.date_input("Valuta da", value=default_from)
-            value_to = col_val_2.date_input("Valuta a", value=default_to)
-
-            save_status = st.form_submit_button("AGGIORNA STATO",use_container_width=True)
-
-        if save_status:
-            if value_to < value_from:
-                st.error("La data 'Valuta a' non può essere precedente a 'Valuta da'.")
-            else:
-                update_status(
-                    sid,
-                    ns,
-                    comment=status_comment,
-                    value_date_from=value_from,
-                    value_date_to=value_to,
-                )
-                st.success("Stato, commento e date di valuta aggiornati.")
-                st.rerun()
+        rid = st.selectbox(
+            "Ricevuta",
+            [o["id"] for o in ops],
+            format_func=lambda oid: next(
+                (f"{o.get('client_name','')} · {euro(o.get('amount',0))}" for o in ops if o["id"] == oid),
+                oid
+            ),
+            key="receipt_history"
+        )
+        rop = next(o for o in ops if o["id"] == rid)
+        st.download_button(
+            "SCARICA RICEVUTA PDF",
+            receipt_pdf(rop),
+            file_name=f"ricevuta_{rid}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
     else:
+        st.info("Non risultano transazioni registrate.")
+
+elif page == "Aggiornamenti stato da Wells Fargo":
+    st.markdown('<div class="gf-title">Aggiornamenti stato da Wells Fargo</div>', unsafe_allow_html=True)
+    st.caption("Registro delle comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente.")
+
+    if not ops:
         st.info("Non risultano operazioni registrate.")
+    else:
+        update_op_id = st.selectbox(
+            "Seleziona operazione",
+            [o["id"] for o in ops],
+            format_func=lambda oid: next(
+                (f"{o.get('client_name','')} · {euro(o.get('amount',0))} · {pretty_date(o.get('completed_at') or o.get('created_at'))}"
+                 for o in ops if o["id"] == oid),
+                oid
+            ),
+            key="wf_update_operation"
+        )
+        selected_op = next(o for o in ops if o["id"] == update_op_id)
+
+        with st.form("wf_update_form", clear_on_submit=True):
+            update_text = st.text_area(
+                "Nuovo aggiornamento",
+                placeholder="Inserisci l’aggiornamento da registrare...",
+                height=120
+            )
+            save_update = st.form_submit_button("SALVA AGGIORNAMENTO", use_container_width=True)
+
+        if save_update:
+            if not update_text.strip():
+                st.warning("Scrivi l’aggiornamento prima di salvarlo.")
+            else:
+                add_operation_update(
+                    selected_op["id"],
+                    selected_op["client_code"],
+                    update_text
+                )
+                st.success("Aggiornamento registrato. Sarà visibile nell’area FE e nella ricevuta.")
+                st.rerun()
+
+        st.markdown("### Ultimi aggiornamenti inseriti")
+        try:
+            recent_updates = get_operation_updates()
+        except Exception as e:
+            st.error("Impossibile caricare gli aggiornamenti.")
+            st.caption(str(e))
+            recent_updates = []
+
+        if recent_updates:
+            op_map = {o["id"]: o for o in ops}
+            st.dataframe([{
+                "Data e ora": pretty_dt(u.get("created_at")),
+                "Cliente": op_map.get(u.get("operation_id"),{}).get("client_name",""),
+                "Importo": euro(op_map.get(u.get("operation_id"),{}).get("amount",0)),
+                "Aggiornamento": u.get("update_text",""),
+            } for u in recent_updates], use_container_width=True, hide_index=True)
+        else:
+            st.info("Nessun aggiornamento ancora registrato.")
 
 elif page == "Messaggi":
     st.markdown('<div class="gf-title">Messaggi clienti</div>', unsafe_allow_html=True)
@@ -936,6 +1051,3 @@ else:
             if st.button("RIATTIVA ACCESSO CLIENTE",use_container_width=True):
                 set_client_active(code,True)
                 st.rerun()
-
-
-
