@@ -453,11 +453,13 @@ def receipt_pdf(op):
 
     # Status banner
     completed = pretty_date(op.get("completed_at")) if op.get("completed_at") else "—"
-    status_label = "PAGAMENTO ESEGUITO" if op.get("status") == "Pagamento eseguito" else str(op.get("status","")).upper()
+    is_new_payment = op.get("status") == "Pagamento eseguito"
+    completion_label = "Data completamento prevista" if is_new_payment else "Data completamento"
+    status_label = "PAGAMENTO ESEGUITO" if is_new_payment else str(op.get("status","")).upper()
     status_banner = Table([
         [
             Paragraph(f"✓  {status_label}", status_big),
-            Paragraph(f"<b>Data completamento</b><br/><font size='15'><b>{completed}</b></font>", status_sub)
+            Paragraph(f"<b>{completion_label}</b><br/><font size='15'><b>{completed}</b></font>", status_sub)
         ]
     ], colWidths=[365,170], rowHeights=[58])
     status_banner.setStyle(TableStyle([
@@ -486,7 +488,7 @@ def receipt_pdf(op):
         [Paragraph("Causale", cell_bold), Paragraph(str(op.get("reason","")), cell)],
         [Paragraph("Data richiesta", cell_bold), Paragraph(pretty_dt(op.get("created_at")), cell)],
         [Paragraph("Data prevista di accredito", cell_bold), Paragraph(pretty_credit_date(op), cell)],
-        [Paragraph("Data completamento", cell_bold), Paragraph(completed, cell)],
+        [Paragraph(completion_label, cell_bold), Paragraph(completed, cell)],
         [Paragraph("Stato operazione", cell_bold), Paragraph("Pagamento eseguito" if op.get("status") == "Pagamento eseguito" else str(op.get("status","")), cell)],
     ]
     if op.get("value_date_from") or op.get("value_date_to"):
@@ -959,6 +961,7 @@ elif page == "Nuova operazione":
                         "value_date_from":value_date.isoformat(),
                         "value_date_to":value_date.isoformat(),
                         "estimated_date":(value_date + timedelta(days=1)).isoformat(),
+                        "completed_at":(value_date + timedelta(days=1)).isoformat(),
                     })
                     st.session_state.last_operation_id = saved["id"]
                     st.rerun()
