@@ -8,7 +8,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
 
 st.set_page_config(page_title="Gestionale Funds", page_icon="◈", layout="wide")
 
@@ -375,142 +375,292 @@ def position(client, ops):
 
 def receipt_pdf(op):
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=42, leftMargin=42, topMargin=42, bottomMargin=42)
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        rightMargin=30, leftMargin=30, topMargin=28, bottomMargin=28
+    )
     styles = getSampleStyleSheet()
-    title = ParagraphStyle("t", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=20,
-                           textColor=colors.HexColor("#102F55"), alignment=TA_CENTER, spaceAfter=6)
-    sub = ParagraphStyle("s", parent=styles["Normal"], fontSize=10,
-                         textColor=colors.HexColor("#667085"), alignment=TA_CENTER, spaceAfter=18)
-    story = [Paragraph("Gestionale Funds", title), Paragraph("Ricevuta della richiesta registrata", sub)]
-    rows = [
-        ["BANCA ORDINANTE", ""],
-        ["Banca", "WELLS FARGO BANK N.A"],
-        ["Address", "420 Montgomery Street, San Francisco, CA 94104"],
-        ["Account Number", "3986639171"],
-        ["User Reference", "210716472797534H01"],
-        ["", ""],
+
+    navy = colors.HexColor("#0B3764")
+    blue = colors.HexColor("#0B67B2")
+    pale_blue = colors.HexColor("#F3F8FD")
+    line = colors.HexColor("#CAD8E7")
+    green = colors.HexColor("#0A7A48")
+    pale_green = colors.HexColor("#E7F8EE")
+    dark = colors.HexColor("#102F55")
+    muted = colors.HexColor("#667085")
+
+    title = ParagraphStyle(
+        "gf_title", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=22, leading=25, textColor=dark, alignment=TA_LEFT, spaceAfter=2
+    )
+    subtitle = ParagraphStyle(
+        "gf_subtitle", parent=styles["Normal"], fontName="Helvetica",
+        fontSize=9.5, leading=12, textColor=muted, alignment=TA_LEFT
+    )
+    section = ParagraphStyle(
+        "gf_section", parent=styles["Normal"], fontName="Helvetica-Bold",
+        fontSize=10.5, leading=13, textColor=colors.white
+    )
+    cell = ParagraphStyle(
+        "gf_cell", parent=styles["Normal"], fontName="Helvetica",
+        fontSize=8.6, leading=11, textColor=colors.HexColor("#172B4D")
+    )
+    cell_bold = ParagraphStyle(
+        "gf_cell_bold", parent=cell, fontName="Helvetica-Bold", textColor=dark
+    )
+    tiny = ParagraphStyle(
+        "gf_tiny", parent=styles["Normal"], fontName="Helvetica",
+        fontSize=7.5, leading=10, textColor=muted
+    )
+    status_big = ParagraphStyle(
+        "gf_status", parent=styles["Normal"], fontName="Helvetica-Bold",
+        fontSize=17, leading=20, textColor=green
+    )
+    status_sub = ParagraphStyle(
+        "gf_status_sub", parent=styles["Normal"], fontName="Helvetica",
+        fontSize=9, leading=12, textColor=dark
+    )
+
+    story = []
+
+    # Header
+    header = Table([
+        [
+            Paragraph("◇  Gestionale Funds", title),
+            Paragraph(
+                f"<b>Documento generato il</b><br/>{datetime.now(ROME).strftime('%d/%m/%Y - %H:%M')}<br/>"
+                f"<b>ID ricevuta:</b> {op.get('id','')}",
+                tiny
+            )
+        ]
+    ], colWidths=[350, 185])
+    header.setStyle(TableStyle([
+        ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("ALIGN",(1,0),(1,0),"RIGHT"),
+        ("BOTTOMPADDING",(0,0),(-1,-1),10),
+        ("LINEBELOW",(0,0),(-1,-1),1.2,navy),
+    ]))
+    story += [
+        header,
+        Spacer(1,12),
+        Paragraph("RICEVUTA DI OPERAZIONE", ParagraphStyle(
+            "receipt_heading", parent=title, fontSize=18, leading=21
+        )),
+        Paragraph("Documento di riepilogo dell’operazione registrata nel Gestionale Funds.", subtitle),
+        Spacer(1,12),
     ]
 
-    try:
-        portfolio = get_portfolio(op.get("client_code"))
-    except Exception:
-        portfolio = None
+    # Status banner
+    completed = pretty_date(op.get("completed_at")) if op.get("completed_at") else "—"
+    status_label = "PAGAMENTO ESEGUITO" if op.get("status") == "Pagamento eseguito" else str(op.get("status","")).upper()
+    status_banner = Table([
+        [
+            Paragraph(f"✓  {status_label}", status_big),
+            Paragraph(f"<b>Data completamento</b><br/><font size='15'><b>{completed}</b></font>", status_sub)
+        ]
+    ], colWidths=[365,170], rowHeights=[58])
+    status_banner.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,-1),pale_green),
+        ("BOX",(0,0),(-1,-1),0.8,colors.HexColor("#58B985")),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("LEFTPADDING",(0,0),(0,0),18),
+        ("LEFTPADDING",(1,0),(1,0),18),
+        ("LINEBEFORE",(1,0),(1,0),0.8,colors.HexColor("#58B985")),
+    ]))
+    story += [status_banner, Spacer(1,14)]
 
-    if portfolio:
-        rows.extend([
-            ["PORTAFOGLIO INVESTIMENTI", ""],
-            ["Asset", portfolio.get("asset","")],
-            ["Capitale iniziale", euro(portfolio.get("initial_capital",0))],
-            ["Rendita", euro(portfolio.get("return_value",0))],
-            ["Liquidità / Fondi disponibili", euro(portfolio.get("available_funds",0))],
-            ["Totale portafoglio", euro(
-                float(portfolio.get("initial_capital",0) or 0) +
-                float(portfolio.get("available_funds",0) or 0)
-            )],
-            ["Quota versamento a debito", euro(portfolio.get("debt_payment",0))],
-            ["Data scadenza versamento", pretty_date(portfolio.get("payment_due_date"))],
-            ["Prossima data versamento", pretty_date(portfolio.get("next_payment_date"))],
-            ["", ""],
-        ])
-
-    rows.extend([
-        ["Codice riferimento",op.get("id","")],
-        ["Beneficiario",op.get("holder","")],
-        ["IBAN",op.get("iban","")],
-        ["Importo",euro(op.get("amount",0))],
-        ["Causale",op.get("reason","")],
-        ["Data richiesta",pretty_dt(op.get("created_at"))],
-        ["Data prevista di accredito",pretty_credit_date(op)],
-        ["Stato",op.get("status","")],
-        ["Data completamento", pretty_date(op.get("completed_at")) if op.get("completed_at") else "—"],
-    ])
-
+    # Main details
+    detail_rows = [
+        [Paragraph("DETTAGLI OPERAZIONE", section), ""],
+        [Paragraph("Cliente", cell_bold), Paragraph(str(op.get("client_name") or op.get("holder") or ""), cell)],
+        [Paragraph("Codice cliente", cell_bold), Paragraph(str(op.get("client_code","")), cell)],
+        [Paragraph("Banca ordinante", cell_bold), Paragraph("WELLS FARGO BANK N.A", cell)],
+        [Paragraph("Indirizzo banca", cell_bold), Paragraph("420 Montgomery Street, San Francisco, CA 94104 – USA", cell)],
+        [Paragraph("Account Number", cell_bold), Paragraph("3986639171", cell)],
+        [Paragraph("User Reference", cell_bold), Paragraph("210716472797534H01", cell)],
+        [Paragraph("Codice riferimento operazione", cell_bold), Paragraph(str(op.get("id","")), cell)],
+        [Paragraph("Beneficiario", cell_bold), Paragraph(str(op.get("holder","")), cell)],
+        [Paragraph("IBAN (banca ricevente)", cell_bold), Paragraph(str(op.get("iban","")), cell)],
+        [Paragraph("Importo", cell_bold), Paragraph(f"<b>{euro(op.get('amount',0))}</b>", cell)],
+        [Paragraph("Causale", cell_bold), Paragraph(str(op.get("reason","")), cell)],
+        [Paragraph("Data richiesta", cell_bold), Paragraph(pretty_dt(op.get("created_at")), cell)],
+        [Paragraph("Data prevista di accredito", cell_bold), Paragraph(pretty_credit_date(op), cell)],
+        [Paragraph("Data completamento", cell_bold), Paragraph(completed, cell)],
+        [Paragraph("Stato operazione", cell_bold), Paragraph("Pagamento eseguito" if op.get("status") == "Pagamento eseguito" else str(op.get("status","")), cell)],
+    ]
     if op.get("value_date_from") or op.get("value_date_to"):
         if op.get("value_date_from") and op.get("value_date_to") and op.get("value_date_from") != op.get("value_date_to"):
-            value_text = f"{pretty_date(op.get('value_date_from'))} - {pretty_date(op.get('value_date_to'))}"
+            value_text = f"{pretty_date(op.get('value_date_from'))} – {pretty_date(op.get('value_date_to'))}"
         else:
             value_text = pretty_date(op.get("value_date_from") or op.get("value_date_to"))
-        rows.append(["Valuta", value_text])
+        detail_rows.append([Paragraph("Valuta", cell_bold), Paragraph(value_text, cell)])
 
-    if op.get("status_comment"):
-        rows.append(["Commento stato", op.get("status_comment")])
+    details = Table(detail_rows, colWidths=[190,345])
+    details.setStyle(TableStyle([
+        ("SPAN",(0,0),(1,0)),
+        ("BACKGROUND",(0,0),(1,0),navy),
+        ("TEXTCOLOR",(0,0),(1,0),colors.white),
+        ("LEFTPADDING",(0,0),(1,0),10),
+        ("TOPPADDING",(0,0),(1,0),6),
+        ("BOTTOMPADDING",(0,0),(1,0),6),
+        ("BACKGROUND",(0,1),(0,-1),pale_blue),
+        ("GRID",(0,1),(-1,-1),0.45,line),
+        ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("LEFTPADDING",(0,1),(-1,-1),8),
+        ("RIGHTPADDING",(0,1),(-1,-1),8),
+        ("TOPPADDING",(0,1),(-1,-1),5),
+        ("BOTTOMPADDING",(0,1),(-1,-1),5),
+    ]))
+    story += [details, Spacer(1,14)]
 
-    if op.get("status") == "In aggiornamento AML":
-        aml_min, aml_max = aml_update_window()
-        rows.extend([
-            ["Motivazione aggiornamento",
-             "Aggiornamento verifiche antiriciclaggio - banca inviante extra SEPA"],
-            ["Tempo stimato", "2-3 giorni lavorativi"],
-            ["Finestra stimata",
-             f"{aml_min.strftime('%d/%m/%Y')} - {aml_max.strftime('%d/%m/%Y')}"],
-        ])
-
+    # Wells Fargo update history. Old status_comment is intentionally not shown here.
     try:
         receipt_updates = get_operation_updates(operation_id=op.get("id"))
     except Exception:
         receipt_updates = []
 
-    if receipt_updates:
-        rows.extend([
-            ["", ""],
-            ["AGGIORNAMENTI STATO DA WELLS FARGO", ""],
-            ["Nota", "Registro delle comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente."],
-        ])
-        for upd in reversed(receipt_updates):
-            rows.append([
-                pretty_dt(upd.get("created_at")),
-                upd.get("update_text","")
-            ])
-
-    portfolio_header_row = next((i for i, row in enumerate(rows) if row and row[0] == "PORTAFOGLIO INVESTIMENTI"), None)
-    updates_header_row = next((i for i, row in enumerate(rows) if row and row[0] == "AGGIORNAMENTI STATO DA WELLS FARGO"), None)
-    table = Table(rows, colWidths=[150,340])
-    base_style = [
-        ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F4F7FB")),
-        ("TEXTCOLOR",(0,0),(0,-1),colors.HexColor("#102F55")),
-        ("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"),
-        ("SPAN",(0,0),(1,0)),
-        ("BACKGROUND",(0,0),(1,0),colors.HexColor("#102F55")),
-        ("TEXTCOLOR",(0,0),(1,0),colors.white),
-        ("ALIGN",(0,0),(1,0),"CENTER"),
-        ("FONTNAME",(1,0),(1,-1),"Helvetica"),
-        ("FONTSIZE",(0,0),(-1,-1),9.5),
-        ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#DDE4ED")),
-        ("VALIGN",(0,0),(-1,-1),"TOP"),
-        ("PADDING",(0,0),(-1,-1),8),
+    updates_rows = [
+        [Paragraph("AGGIORNAMENTI STATO DA WELLS FARGO", section), ""],
+        [Paragraph(
+            "Registro delle comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente.",
+            tiny
+        ), ""],
+        [Paragraph("<b>Data e ora</b>", cell), Paragraph("<b>Aggiornamento</b>", cell)],
     ]
-    if portfolio_header_row is not None:
-        base_style.extend([
-            ("SPAN",(0,portfolio_header_row),(1,portfolio_header_row)),
-            ("BACKGROUND",(0,portfolio_header_row),(1,portfolio_header_row),colors.HexColor("#102F55")),
-            ("TEXTCOLOR",(0,portfolio_header_row),(1,portfolio_header_row),colors.white),
-            ("ALIGN",(0,portfolio_header_row),(1,portfolio_header_row),"CENTER"),
-            ("FONTNAME",(0,portfolio_header_row),(1,portfolio_header_row),"Helvetica-Bold"),
+    if receipt_updates:
+        for upd in reversed(receipt_updates):
+            updates_rows.append([
+                Paragraph(pretty_dt(upd.get("created_at")), cell),
+                Paragraph(str(upd.get("update_text","")), cell)
+            ])
+    else:
+        updates_rows.append([
+            Paragraph("—", cell),
+            Paragraph("Nessun aggiornamento amministrativo registrato.", cell)
         ])
-    if updates_header_row is not None:
-        base_style.extend([
-            ("SPAN",(0,updates_header_row),(1,updates_header_row)),
-            ("BACKGROUND",(0,updates_header_row),(1,updates_header_row),colors.HexColor("#102F55")),
-            ("TEXTCOLOR",(0,updates_header_row),(1,updates_header_row),colors.white),
-            ("ALIGN",(0,updates_header_row),(1,updates_header_row),"CENTER"),
-            ("FONTNAME",(0,updates_header_row),(1,updates_header_row),"Helvetica-Bold"),
+
+    updates = Table(updates_rows, colWidths=[135,400])
+    updates.setStyle(TableStyle([
+        ("SPAN",(0,0),(1,0)),
+        ("BACKGROUND",(0,0),(1,0),navy),
+        ("TEXTCOLOR",(0,0),(1,0),colors.white),
+        ("SPAN",(0,1),(1,1)),
+        ("BACKGROUND",(0,1),(1,1),pale_blue),
+        ("BACKGROUND",(0,2),(1,2),colors.HexColor("#E8F0F8")),
+        ("GRID",(0,2),(-1,-1),0.45,line),
+        ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("LEFTPADDING",(0,0),(-1,-1),8),
+        ("RIGHTPADDING",(0,0),(-1,-1),8),
+        ("TOPPADDING",(0,0),(-1,-1),5),
+        ("BOTTOMPADDING",(0,0),(-1,-1),5),
+    ]))
+    story += [updates, Spacer(1,14)]
+
+    # Informational note
+    note = Table([[
+        Paragraph(
+            "<b>Nota informativa</b><br/>"
+            "Gli aggiornamenti vengono registrati dall’amministrazione del Gestionale Funds sulla base "
+            "delle comunicazioni relative alla banca inviante e alla banca ricevente. "
+            "Per eventuali chiarimenti è possibile utilizzare la sezione Messaggi.",
+            ParagraphStyle("note", parent=cell, fontSize=8, leading=11)
+        )
+    ]], colWidths=[535])
+    note.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,-1),pale_blue),
+        ("BOX",(0,0),(-1,-1),0.6,line),
+        ("LEFTPADDING",(0,0),(-1,-1),12),
+        ("RIGHTPADDING",(0,0),(-1,-1),12),
+        ("TOPPADDING",(0,0),(-1,-1),9),
+        ("BOTTOMPADDING",(0,0),(-1,-1),9),
+    ]))
+    story += [
+        note, Spacer(1,16),
+        Table([[
+            Paragraph("<b>Gestionale Funds</b><br/>Sicurezza. Controllo. Risultati.", tiny),
+            Paragraph("Documento generato automaticamente.<br/>La presente ricevuta ha valore informativo.", tiny)
+        ]], colWidths=[300,235], style=[
+            ("LINEABOVE",(0,0),(-1,-1),1,navy),
+            ("TOPPADDING",(0,0),(-1,-1),8),
+            ("ALIGN",(1,0),(1,0),"RIGHT"),
+            ("VALIGN",(0,0),(-1,-1),"TOP"),
         ])
-    table.setStyle(TableStyle(base_style))
-    story += [table, Spacer(1,10), Paragraph("Data e ora visualizzate secondo il fuso Europe/Rome.", styles["Normal"])]
+    ]
+
     doc.build(story)
     return buf.getvalue()
 
 st.markdown("""
 <style>
-.stApp{background:#f4f7fb}
-.block-container{padding-top:1.2rem;max-width:1400px}
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#102f55,#174d82)}
-[data-testid="stSidebar"] *{color:white}
-.gf-title{font-size:2rem;font-weight:800;color:#102f55}
-.gf-sub{color:#667085;margin-bottom:1rem}
-.gf-pill{display:inline-block;background:#eaf8f2;color:#08734d;padding:6px 11px;border-radius:999px;font-weight:700}
-[data-testid="stMetric"]{background:white;border:1px solid #e3e9f1;padding:16px;border-radius:16px}
-div.stButton>button,div.stFormSubmitButton>button{background:#175b9c;color:white;border:0;border-radius:10px;min-height:44px;font-weight:700}
+:root{
+  --gf-navy:#0b3764;
+  --gf-blue:#0b67b2;
+  --gf-bg:#f3f7fb;
+  --gf-line:#d8e3ef;
+  --gf-text:#132a45;
+  --gf-muted:#6b7b8e;
+  --gf-green:#168451;
+  --gf-green-bg:#e7f7ee;
+}
+.stApp{background:var(--gf-bg);color:var(--gf-text)}
+.block-container{padding-top:1.35rem;padding-bottom:2rem;max-width:1280px}
+[data-testid="stSidebar"]{
+  background:linear-gradient(180deg,#0b3764 0%,#0a315a 100%);
+  border-right:0;
+}
+[data-testid="stSidebar"] .block-container{padding-top:1.35rem}
+[data-testid="stSidebar"] *{color:#fff}
+[data-testid="stSidebar"] hr{border-color:rgba(255,255,255,.16)}
+[data-testid="stSidebar"] [role="radiogroup"] label{
+  padding:.45rem .55rem;border-radius:8px;margin:.08rem 0;
+}
+[data-testid="stSidebar"] [role="radiogroup"] label:hover{
+  background:rgba(255,255,255,.09);
+}
+[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){
+  background:#0b67b2;
+}
+.gf-title{
+  font-size:2rem;font-weight:800;letter-spacing:-.02em;color:var(--gf-navy);
+  margin-bottom:.15rem
+}
+.gf-sub{color:var(--gf-muted);margin-bottom:1.1rem}
+.gf-pill{
+  display:inline-block;background:#dceeff;color:#0b5a9e;padding:6px 12px;
+  border-radius:999px;font-weight:800;font-size:.84rem
+}
+[data-testid="stMetric"]{
+  background:#fff;border:1px solid var(--gf-line);padding:16px 18px;
+  border-radius:12px;box-shadow:0 1px 2px rgba(16,47,85,.03)
+}
+[data-testid="stMetricLabel"]{color:var(--gf-muted)}
+[data-testid="stMetricValue"]{color:var(--gf-navy);font-weight:800}
+div[data-testid="stDataFrame"]{
+  background:#fff;border:1px solid var(--gf-line);border-radius:10px;
+  overflow:hidden
+}
+div.stButton>button,div.stFormSubmitButton>button,
+div.stDownloadButton>button{
+  background:#0b67b2;color:#fff;border:0;border-radius:7px;
+  min-height:42px;font-weight:750
+}
+div.stButton>button:hover,div.stFormSubmitButton>button:hover,
+div.stDownloadButton>button:hover{
+  background:#095a9c;color:#fff;border:0
+}
+div[data-baseweb="select"]>div, textarea, input{
+  border-color:var(--gf-line)!important;border-radius:7px!important
+}
+[data-testid="stAlert"]{border-radius:9px}
+[data-testid="stChatMessage"]{
+  background:#fff;border:1px solid var(--gf-line);border-radius:10px;
+  padding:.8rem 1rem;margin-bottom:.65rem
+}
+h3{
+  color:var(--gf-navy)!important;font-weight:800!important;
+  margin-top:1.25rem!important
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -571,7 +721,7 @@ if st.session_state.role == "client":
     associated, ordered, residual, open_ops, next_due = position(client, ops)
 
     with st.sidebar:
-        st.markdown("## ◈ Gestionale Funds")
+        st.markdown("## ◇ Gestionale Funds")
         st.caption(f"Area cliente {code}")
         if st.button("Esci", use_container_width=True):
             st.session_state.role = None
@@ -712,7 +862,7 @@ if mark_expired(ops):
     ops = get_operations()
 
 with st.sidebar:
-    st.markdown("## ◈ Gestionale Funds")
+    st.markdown("## ◇ Gestionale Funds")
     page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Portafoglio investimenti","Storico transazioni","Aggiornamenti stato da Wells Fargo","Messaggi","Accessi clienti"],label_visibility="collapsed")
     st.divider()
     st.caption("Area amministratore")
@@ -726,10 +876,10 @@ if page == "Dashboard":
     col1,col2,col3,col4 = st.columns(4)
     col1.metric("Clienti attivi",len([client for client in clients if client["status"]=="Attivo"]))
     col2.metric("Somme associate",euro(sum(float(client["balance"]) for client in clients)))
-    col3.metric("Da gestire",sum(1 for o in ops if o.get("status") != "Annullato"))
+    col3.metric("Transazioni",sum(1 for o in ops if o.get("status") != "Annullato"))
     col4.metric("Totale ordinato",euro(sum(float(o.get("amount",0) or 0) for o in ops if o.get("status")!="Annullato")))
     open_ops = [o for o in ops if o.get("status") != "Annullato"]
-    st.markdown("### Operazioni aperte")
+    st.markdown("### Elenco transazioni")
     if open_ops:
         st.dataframe([{
             "ID":o["id"],"Data":pretty_dt(o.get("created_at")),"Cliente":o["client_name"],
