@@ -517,6 +517,13 @@ def receipt_pdf(op):
     # Wells Fargo update history. Old status_comment is intentionally not shown here.
     try:
         receipt_updates = get_operation_updates(operation_id=op.get("id"))
+        # Compatibilità con aggiornamenti già salvati: se il riferimento operazione
+        # non restituisce righe, recupera gli aggiornamenti del cliente e mantiene
+        # quelli riferiti a questa operazione quando possibile.
+        if not receipt_updates and op.get("client_code"):
+            client_updates = get_operation_updates(client_code=op.get("client_code"))
+            exact = [u for u in client_updates if str(u.get("operation_id","")) == str(op.get("id",""))]
+            receipt_updates = exact or client_updates
     except Exception:
         receipt_updates = []
 
