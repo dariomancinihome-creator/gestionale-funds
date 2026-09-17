@@ -1042,6 +1042,43 @@ elif page == "Storico transazioni":
             "Data completamento": pretty_date(o.get("completed_at")) if o.get("completed_at") else "—",
         } for o in filtered], use_container_width=True, hide_index=True)
 
+        st.markdown("### Modifica transazione")
+        edit_id = st.selectbox(
+            "Transazione da modificare",
+            [o["id"] for o in ops],
+            format_func=lambda oid: next(
+                (f"{o.get('client_name','')} · {euro(o.get('amount',0))} · {pretty_date(o.get('created_at'))}"
+                 for o in ops if o["id"] == oid),
+                oid
+            ),
+            key="edit_transaction"
+        )
+        edit_op = next(o for o in ops if o["id"] == edit_id)
+        current_value = edit_op.get("value_date_to") or edit_op.get("value_date_from") or datetime.now(ROME).date().isoformat()
+        try:
+            current_value_date = date.fromisoformat(str(current_value)[:10])
+        except Exception:
+            current_value_date = datetime.now(ROME).date()
+
+        with st.form("edit_transaction_form"):
+            new_value_date = st.date_input(
+                "Data valuta prevista",
+                value=current_value_date,
+                format="DD/MM/YYYY"
+            )
+            st.caption(f"Data prevista di accredito: {(new_value_date + timedelta(days=1)).strftime('%d/%m/%Y')}")
+            save_transaction = st.form_submit_button("SALVA MODIFICA", use_container_width=True)
+
+        if save_transaction:
+            update_status(
+                edit_op["id"],
+                "Pagamento eseguito",
+                value_date_from=new_value_date,
+                value_date_to=new_value_date
+            )
+            st.success("Transazione aggiornata: stato Pagamento eseguito e nuova data valuta registrata.")
+            st.rerun()
+
         rid = st.selectbox(
             "Ricevuta",
             [o["id"] for o in ops],
