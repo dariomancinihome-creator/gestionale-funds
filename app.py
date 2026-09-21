@@ -10,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
 
-st.set_page_config(page_title="Gestionale Funds", page_icon="◈", layout="wide")
+st.set_page_config(page_title="VIL Private", page_icon="V", layout="wide")
 
 BASE = Path(__file__).parent
 CLIENTS_FILE = BASE / "clients.json"
@@ -427,7 +427,7 @@ def receipt_pdf(op):
     # Header
     header = Table([
         [
-            Paragraph("◇  Gestionale Funds", title),
+            Paragraph("◇  VIL Private", title),
             Paragraph(
                 f"<b>Documento generato il</b><br/>{datetime.now(ROME).strftime('%d/%m/%Y - %H:%M')}<br/>"
                 f"<b>ID ricevuta:</b> {op.get('id','')}",
@@ -447,7 +447,7 @@ def receipt_pdf(op):
         Paragraph("RICEVUTA DI OPERAZIONE", ParagraphStyle(
             "receipt_heading", parent=title, fontSize=18, leading=21
         )),
-        Paragraph("Documento di riepilogo dell’operazione registrata nel Gestionale Funds.", subtitle),
+        Paragraph("Documento di riepilogo dell’operazione registrata nell’area VIL Private.", subtitle),
         Spacer(1,12),
     ]
 
@@ -570,7 +570,7 @@ def receipt_pdf(op):
     note = Table([[
         Paragraph(
             "<b>Nota informativa</b><br/>"
-            "Gli aggiornamenti vengono registrati dall’amministrazione del Gestionale Funds sulla base "
+            "Gli aggiornamenti vengono registrati dall’amministrazione di VIL Private sulla base "
             "delle comunicazioni relative alla banca inviante e alla banca ricevente. "
             "Per eventuali chiarimenti è possibile utilizzare la sezione Messaggi.",
             ParagraphStyle("note", parent=cell, fontSize=8, leading=11)
@@ -587,7 +587,7 @@ def receipt_pdf(op):
     story += [
         note, Spacer(1,16),
         Table([[
-            Paragraph("<b>Gestionale Funds</b><br/>Sicurezza. Controllo. Risultati.", tiny),
+            Paragraph("<b>VIL Private</b><br/>Area personale di gestione finanziaria.", tiny),
             Paragraph("Documento generato automaticamente.<br/>La presente ricevuta ha valore informativo.", tiny)
         ]], colWidths=[300,235], style=[
             ("LINEABOVE",(0,0),(-1,-1),1,navy),
@@ -670,6 +670,24 @@ h3{
   color:var(--gf-navy)!important;font-weight:800!important;
   margin-top:1.25rem!important
 }
+
+.vil-brand{font-size:1.65rem;font-weight:900;letter-spacing:.08em;color:#fff;margin-bottom:.1rem}
+.vil-private{font-size:.72rem;letter-spacing:.22em;color:#b9d2ea;text-transform:uppercase;margin-bottom:1.25rem}
+.vil-welcome{font-size:2rem;font-weight:850;color:#0b3764;letter-spacing:-.025em;margin-bottom:.2rem}
+.vil-date{color:#6b7b8e;margin-bottom:1.2rem}
+.vil-card{background:#fff;border:1px solid #d8e3ef;border-radius:14px;padding:18px 20px;
+          box-shadow:0 2px 8px rgba(16,47,85,.04);height:100%}
+.vil-card-label{color:#6b7b8e;font-size:.82rem;font-weight:700;margin-bottom:6px}
+.vil-card-value{color:#0b3764;font-size:1.65rem;font-weight:850}
+.vil-section{font-size:1.18rem;font-weight:850;color:#0b3764;margin:1.4rem 0 .65rem}
+.vil-notice{background:#fff;border:1px solid #d8e3ef;border-left:5px solid #0b67b2;
+            border-radius:12px;padding:18px 20px;margin:8px 0 18px;box-shadow:0 2px 8px rgba(16,47,85,.04)}
+.vil-notice-kicker{font-size:.76rem;font-weight:850;color:#0b67b2;text-transform:uppercase;letter-spacing:.06em}
+.vil-notice-title{font-size:1.08rem;font-weight:850;color:#0b3764;margin:5px 0 7px}
+.vil-muted{color:#6b7b8e}
+.vil-positive{color:#168451;font-weight:800}
+.vil-doc{background:#fff;border:1px solid #d8e3ef;border-radius:10px;padding:12px 14px;margin-bottom:8px}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -684,7 +702,7 @@ for k,v in {"role":None,"client_code":None,"last_operation_id":None}.items():
 clients = clients_load()
 
 if st.session_state.role is None:
-    st.markdown('<div class="gf-title">Gestionale Funds</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gf-title">VIL Private</div>', unsafe_allow_html=True)
     st.markdown('<div class="gf-sub">Seleziona l’area di accesso</div>', unsafe_allow_html=True)
     tab_admin, tab_client = st.tabs(["Area Amministratore","Area Cliente FE"])
 
@@ -728,141 +746,205 @@ if st.session_state.role == "client":
     if mark_expired(ops):
         ops = get_operations(code)
     associated, ordered, residual, open_ops, next_due = position(client, ops)
-
-    with st.sidebar:
-        st.markdown("## ◇ Gestionale Funds")
-        st.caption(f"Area cliente {code}")
-        if st.button("Esci", use_container_width=True):
-            st.session_state.role = None
-            st.session_state.client_code = None
-            st.rerun()
-
-    st.markdown(f'<div class="gf-title">{client["name"]}</div>', unsafe_allow_html=True)
-    st.markdown(f'<span class="gf-pill">{code} · {client["status"]}</span>', unsafe_allow_html=True)
-    st.caption(f"Banca associata: {client['bank']}")
-    a,b,c,d = st.columns(4)
-    a.metric("Somma associata",euro(associated))
-    b.metric("Totale ordinato",euro(ordered))
-    c.metric("Residuo",euro(residual))
-    d.metric("Operazioni aperte",len(open_ops))
-    if next_due:
-        st.info(f"Prossima data prevista: {next_due.strftime('%d/%m/%Y')}")
-
-    aml_ops = [o for o in open_ops if o.get("status") == "In aggiornamento AML"]
-    if aml_ops:
-        aml_min, aml_max = aml_update_window()
-        st.warning(
-            "Aggiornamento verifiche antiriciclaggio – banca inviante extra SEPA\n\n"
-            "**Tempo stimato:** 2–3 giorni lavorativi\n\n"
-            f"**Finestra stimata:** {aml_min.strftime('%d/%m/%Y')} – {aml_max.strftime('%d/%m/%Y')}"
-        )
-
-    st.markdown("### Le mie transazioni")
-    if ops:
-        st.dataframe([{
-            "Data": pretty_date(o.get("completed_at") or o.get("created_at")),
-            "Importo": euro(o["amount"]),
-            "Stato": "Pagamento eseguito" if o.get("status") == "Pagamento eseguito" else o.get("status",""),
-            "Data completamento": pretty_date(o.get("completed_at")) if o.get("completed_at") else "—",
-        } for o in ops], use_container_width=True, hide_index=True)
-
-        rid = st.selectbox(
-            "Ricevuta da scaricare",
-            [o["id"] for o in ops],
-            format_func=lambda oid: next(
-                (f"{o.get('client_name','')} · {euro(o.get('amount',0))} · {pretty_date(o.get('completed_at') or o.get('created_at'))}"
-                 for o in ops if o["id"] == oid),
-                oid
-            ),
-        )
-        rop = next(o for o in ops if o["id"] == rid)
-        st.download_button(
-            "SCARICA RICEVUTA PDF",
-            receipt_pdf(rop),
-            file_name=f"ricevuta_{rid}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-    else:
-        st.info("Non risultano transazioni registrate.")
-
-    st.markdown("### Aggiornamenti sulla mia operazione")
-    st.caption("Registro delle comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente.")
-    try:
-        client_updates = get_operation_updates(client_code=code)
-    except Exception:
-        client_updates = []
-
-    if client_updates:
-        op_map = {o["id"]: o for o in ops}
-        for upd in client_updates:
-            linked = op_map.get(upd.get("operation_id"), {})
-            st.markdown(
-                f"**{pretty_dt(upd.get('created_at'))}**  \\n"
-                f"{upd.get('update_text','')}  \\n"
-                f"<small>{euro(linked.get('amount',0)) if linked else ''}</small>",
-                unsafe_allow_html=True
-            )
-            st.divider()
-    else:
-        st.info("Nessun aggiornamento amministrativo disponibile.")
-
-    st.markdown("### Portafoglio investimenti")
     try:
         portfolio = get_portfolio(code)
     except Exception:
         portfolio = None
 
-    if portfolio:
-        p1,p2,p3,p4 = st.columns(4)
-        p1.metric("Capitale iniziale", euro(portfolio.get("initial_capital",0)))
-        p2.metric("Rendita", euro(portfolio.get("return_value",0)))
-        p3.metric("Fondi disponibili", euro(portfolio.get("available_funds",0)))
-        portfolio_total = (
-            float(portfolio.get("initial_capital",0) or 0) +
-            float(portfolio.get("available_funds",0) or 0)
+    invested = float((portfolio or {}).get("initial_capital", 0) or 0)
+    available = float((portfolio or {}).get("available_funds", residual) or 0)
+    total_assets = available + invested
+    today_label = datetime.now(ROME).strftime("%d %B %Y")
+
+    with st.sidebar:
+        st.markdown('<div class="vil-brand">VIL</div><div class="vil-private">PRIVATE</div>', unsafe_allow_html=True)
+        st.caption(f"{client['name']} · {code}")
+        client_page = st.radio(
+            "Navigazione",
+            ["Home", "Movimenti", "Bonifici e pagamenti", "Bacheca e documenti"] +
+            (["Investimenti e portafoglio"] if portfolio else []),
+            label_visibility="collapsed",
+            key="vil_client_nav"
         )
-        p4.metric("Totale", euro(portfolio_total))
-        st.write(f"**Asset:** {portfolio.get('asset','')}")
-        st.write(f"**Quota versamento a debito:** {euro(portfolio.get('debt_payment',0))}")
-        st.write(f"**Data scadenza versamento:** {pretty_date(portfolio.get('payment_due_date'))}")
-        st.write(f"**Prossima data versamento:** {pretty_date(portfolio.get('next_payment_date'))}")
-    else:
-        st.info("Portafoglio investimenti non ancora configurato.")
+        st.divider()
+        st.caption(f"Banca associata: {client['bank']}")
+        if st.button("Esci", use_container_width=True):
+            st.session_state.role = None
+            st.session_state.client_code = None
+            st.rerun()
 
-    st.markdown("### Messaggi")
-    st.caption("Scrivi all'amministrazione. La conversazione rimane memorizzata nella cronologia.")
-    try:
-        client_messages = get_messages(code)
-    except Exception as e:
-        st.error("Impossibile caricare i messaggi.")
-        st.caption(str(e))
-        client_messages = []
+    if client_page == "Home":
+        st.markdown(f'<div class="vil-welcome">Buongiorno, {client["name"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="vil-date">Area personale VIL Private · {today_label}</div>', unsafe_allow_html=True)
 
-    if client_messages:
+        c1,c2,c3 = st.columns(3)
+        c1.markdown(f'<div class="vil-card"><div class="vil-card-label">Saldo disponibile</div><div class="vil-card-value">{euro(available)}</div><div class="vil-muted">Fondi disponibili registrati</div></div>', unsafe_allow_html=True)
+        c2.markdown(f'<div class="vil-card"><div class="vil-card-label">Investimenti</div><div class="vil-card-value">{euro(invested)}</div><div class="vil-muted">Capitale in portafoglio</div></div>', unsafe_allow_html=True)
+        c3.markdown(f'<div class="vil-card"><div class="vil-card-label">Patrimonio totale</div><div class="vil-card-value">{euro(total_assets)}</div><div class="vil-muted">Liquidità + investimenti</div></div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="vil-section">Movimenti recenti</div>', unsafe_allow_html=True)
+        if ops:
+            st.dataframe([{
+                "Data": pretty_date(o.get("completed_at") or o.get("created_at")),
+                "Descrizione": o.get("reason","Pagamento"),
+                "Beneficiario": o.get("holder",""),
+                "Importo": euro(o.get("amount",0)),
+                "Stato": "Pagamento eseguito" if o.get("status") == "Pagamento eseguito" else o.get("status","")
+            } for o in ops[:5]], use_container_width=True, hide_index=True)
+        else:
+            st.info("Nessun movimento registrato.")
+
+        st.markdown('<div class="vil-section">Stato operazioni</div>', unsafe_allow_html=True)
+        try:
+            home_updates = get_operation_updates(client_code=code)
+        except Exception:
+            home_updates = []
+        if home_updates:
+            latest = home_updates[0]
+            st.markdown(
+                f'<div class="vil-card"><div class="vil-card-label">Ultimo aggiornamento · {pretty_dt(latest.get("created_at"))}</div>'
+                f'<div>{latest.get("update_text","")}</div><br><div class="vil-muted" style="font-size:.78rem">'
+                f'Comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente.</div></div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.info("Nessun aggiornamento operativo disponibile.")
+
+    elif client_page == "Movimenti":
+        st.markdown('<div class="gf-title">Movimenti</div>', unsafe_allow_html=True)
+        st.markdown('<div class="gf-sub">Storico delle operazioni registrate nella tua area personale</div>', unsafe_allow_html=True)
+        if ops:
+            st.dataframe([{
+                "Data": pretty_date(o.get("completed_at") or o.get("created_at")),
+                "Descrizione": o.get("reason",""),
+                "Beneficiario": o.get("holder",""),
+                "Importo": euro(o.get("amount",0)),
+                "Valuta": pretty_date(o.get("value_date_to") or o.get("value_date_from")),
+                "Stato": "Pagamento eseguito" if o.get("status") == "Pagamento eseguito" else o.get("status","")
+            } for o in ops], use_container_width=True, hide_index=True)
+        else:
+            st.info("Non risultano movimenti registrati.")
+
+    elif client_page == "Bonifici e pagamenti":
+        st.markdown('<div class="gf-title">Bonifici e pagamenti</div>', unsafe_allow_html=True)
+        st.markdown('<div class="gf-sub">Invia un ordine di pagamento all’amministrazione</div>', unsafe_allow_html=True)
+        st.info("L’invio da questa sezione registra una richiesta. L’esecuzione e i relativi riferimenti vengono gestiti dall’amministrazione.")
+        with st.form("client_payment_order", clear_on_submit=True):
+            p1,p2 = st.columns(2)
+            pay_holder = p1.text_input("Beneficiario")
+            pay_iban = p2.text_input("IBAN beneficiario")
+            pay_amount = st.number_input("Importo", min_value=0.01, step=100.0)
+            pay_reason = st.text_input("Causale")
+            pay_confirm = st.checkbox("Confermo i dati dell’ordine")
+            pay_send = st.form_submit_button("INVIA ORDINE DI PAGAMENTO", use_container_width=True)
+        if pay_send:
+            errors=[]
+            if not pay_holder.strip(): errors.append("Inserisci il beneficiario.")
+            if not valid_iban(pay_iban): errors.append("L’IBAN non supera il controllo.")
+            if pay_amount > available: errors.append("L’importo supera i fondi disponibili registrati.")
+            if not pay_reason.strip(): errors.append("Inserisci la causale.")
+            if not pay_confirm: errors.append("Conferma i dati prima dell’invio.")
+            if errors:
+                for e in errors: st.error(e)
+            else:
+                # L'ordine viene inoltrato all'amministrazione come messaggio, senza
+                # dichiararlo eseguito né generare una ricevuta bancaria.
+                send_message(
+                    code, "client",
+                    f"ORDINE DI PAGAMENTO — Beneficiario: {pay_holder.strip()} | "
+                    f"IBAN: {clean_iban(pay_iban)} | Importo: {euro(pay_amount)} | "
+                    f"Causale: {pay_reason.strip()}"
+                )
+                st.success("Ordine inviato all’amministrazione. Comparirà tra le comunicazioni della tua area.")
+                st.rerun()
+
+    elif client_page == "Bacheca e documenti":
+        st.markdown('<div class="gf-title">Bacheca e documenti</div>', unsafe_allow_html=True)
+        st.markdown('<div class="gf-sub">Comunicazioni, ricevute e documenti della tua area personale</div>', unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class="vil-notice">
+          <div class="vil-notice-kicker">Avviso di servizio · 21 settembre 2026</div>
+          <div class="vil-notice-title">Aggiornamento piattaforma VIL Private</div>
+          <div class="vil-muted">
+            Nel corso del weekend il gestionale è stato migrato sulla nuova piattaforma <b>VIL Private</b>,
+            con una nuova organizzazione dell’area personale, dei movimenti, dei documenti e delle operazioni.<br><br>
+            La migrazione e l’allineamento dei dati sono attualmente in fase di completamento.
+            <b>L’aggiornamento della piattaforma è previsto entro le ore 00:00 di oggi, 21/09/2026.</b><br><br>
+            Durante questa fase alcune informazioni o funzionalità potrebbero essere temporaneamente in aggiornamento.
+            I dati e lo storico delle operazioni già presenti vengono mantenuti nella nuova piattaforma.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown('<div class="vil-section">Ricevute</div>', unsafe_allow_html=True)
+        if ops:
+            for i,o in enumerate(ops):
+                a,b = st.columns([4,1])
+                with a:
+                    st.markdown(
+                        f'<div class="vil-doc"><b>Ricevuta operazione</b><br>'
+                        f'<span class="vil-muted">{pretty_date(o.get("completed_at") or o.get("created_at"))} · '
+                        f'{o.get("holder","")} · {euro(o.get("amount",0))}</span></div>',
+                        unsafe_allow_html=True
+                    )
+                with b:
+                    st.download_button(
+                        "Scarica PDF", receipt_pdf(o),
+                        file_name=f"ricevuta_{o['id']}.pdf",
+                        mime="application/pdf", key=f"vil_receipt_{i}",
+                        use_container_width=True
+                    )
+        else:
+            st.info("Nessuna ricevuta disponibile.")
+
+        st.markdown('<div class="vil-section">Aggiornamenti operazioni</div>', unsafe_allow_html=True)
+        try:
+            client_updates = get_operation_updates(client_code=code)
+        except Exception:
+            client_updates = []
+        if client_updates:
+            for upd in client_updates:
+                st.markdown(f"**{pretty_dt(upd.get('created_at'))}**  \n{upd.get('update_text','')}")
+                st.divider()
+        else:
+            st.info("Nessun aggiornamento amministrativo disponibile.")
+
+        st.markdown('<div class="vil-section">Messaggi con l’amministrazione</div>', unsafe_allow_html=True)
+        try:
+            client_messages = get_messages(code)
+        except Exception:
+            client_messages = []
         for msg in client_messages:
             role = "user" if msg.get("sender") == "client" else "assistant"
             label = "Tu" if msg.get("sender") == "client" else "Amministrazione"
             with st.chat_message(role):
                 st.markdown(f"**{label}** · {pretty_dt(msg.get('created_at'))}")
                 st.write(msg.get("message",""))
-    else:
-        st.info("Nessun messaggio nella conversazione.")
-
-    with st.form("client_message_form", clear_on_submit=True):
-        new_message = st.text_area("Nuovo messaggio", placeholder="Scrivi qui il tuo messaggio...", height=100)
-        send_client_message = st.form_submit_button("INVIA MESSAGGIO", use_container_width=True)
-    if send_client_message:
-        if not new_message.strip():
-            st.warning("Scrivi un messaggio prima di inviare.")
-        else:
-            try:
+        with st.form("vil_client_message_form", clear_on_submit=True):
+            new_message = st.text_area("Scrivi all’amministrazione", height=90)
+            send_client_message = st.form_submit_button("INVIA MESSAGGIO", use_container_width=True)
+        if send_client_message:
+            if new_message.strip():
                 send_message(code, "client", new_message)
                 st.success("Messaggio inviato.")
                 st.rerun()
-            except Exception as e:
-                st.error("Invio non riuscito.")
-                st.caption(str(e))
+            else:
+                st.warning("Scrivi un messaggio prima di inviare.")
+
+    elif client_page == "Investimenti e portafoglio":
+        st.markdown('<div class="gf-title">Investimenti e portafoglio</div>', unsafe_allow_html=True)
+        st.markdown('<div class="gf-sub">Riepilogo del portafoglio registrato nella tua area personale</div>', unsafe_allow_html=True)
+        p1,p2,p3 = st.columns(3)
+        p1.metric("Capitale iniziale", euro(portfolio.get("initial_capital",0)))
+        p2.metric("Fondi disponibili", euro(portfolio.get("available_funds",0)))
+        p3.metric("Totale portafoglio", euro(total_assets))
+        q1,q2 = st.columns(2)
+        q1.metric("Rendita", euro(portfolio.get("return_value",0)))
+        q2.metric("Quota versamento a debito", euro(portfolio.get("debt_payment",0)))
+        st.markdown(f"**Asset:** {portfolio.get('asset','')}")
+        st.markdown(f"**Data scadenza versamento:** {pretty_date(portfolio.get('payment_due_date'))}")
+        st.markdown(f"**Prossima data versamento:** {pretty_date(portfolio.get('next_payment_date'))}")
 
     st.stop()
 
@@ -871,7 +953,7 @@ if mark_expired(ops):
     ops = get_operations()
 
 with st.sidebar:
-    st.markdown("## ◇ Gestionale Funds")
+    st.markdown('<div class="vil-brand">VIL</div><div class="vil-private">PRIVATE · ADMIN</div>', unsafe_allow_html=True)
     page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Portafoglio investimenti","Storico transazioni","Aggiornamenti stato da Wells Fargo","Messaggi","Accessi clienti"],label_visibility="collapsed")
     st.divider()
     st.caption("Area amministratore")
