@@ -360,6 +360,53 @@ def save_portfolio(client_code, asset, initial_capital, return_value, debt_payme
     )
     r.raise_for_status()
 
+
+def get_client_profiles():
+    """Admin overrides/new clients. Falls back gracefully if table is not created yet."""
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/client_profiles",
+            headers=api_headers(),
+            params={"select":"*", "order":"client_code.asc"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return []
+
+def save_client_profile(client_code, name, bank, balance, status="Attivo"):
+    payload = {
+        "client_code": client_code.strip().upper(),
+        "name": name.strip(),
+        "bank": bank.strip(),
+        "balance": round(float(balance or 0), 2),
+        "status": status,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    r = requests.post(
+        f"{SUPABASE_URL}/rest/v1/client_profiles",
+        headers=api_headers("resolution=merge-duplicates,return=minimal"),
+        params={"on_conflict":"client_code"},
+        json=payload, timeout=15,
+    )
+    r.raise_for_status()
+
+def merge_clients(base_clients, profiles):
+    merged = {c["code"]: dict(c) for c in base_clients}
+    for p in profiles:
+        code = p.get("client_code")
+        if not code:
+            continue
+        merged[code] = {
+            "code": code,
+            "name": p.get("name") or merged.get(code,{}).get("name",""),
+            "bank": p.get("bank") or merged.get(code,{}).get("bank",""),
+            "balance": float(p.get("balance", merged.get(code,{}).get("balance",0)) or 0),
+            "status": p.get("status") or merged.get(code,{}).get("status","Attivo"),
+        }
+    return list(merged.values())
+
 def position(client, ops):
     associated = float(client["balance"])
     ordered = sum(float(o.get("amount",0) or 0) for o in ops if o.get("status") != "Annullato")
@@ -699,7 +746,7 @@ for k,v in {"role":None,"client_code":None,"last_operation_id":None}.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-clients = clients_load()
+clients = merge_clients(clients_load(), get_client_profiles())
 
 if st.session_state.role is None:
     st.markdown('<div class="gf-title">VIL Private</div>', unsafe_allow_html=True)
@@ -954,7 +1001,7 @@ if mark_expired(ops):
 
 with st.sidebar:
     st.markdown('<div class="vil-brand">VIL</div><div class="vil-private">PRIVATE · ADMIN</div>', unsafe_allow_html=True)
-    page = st.radio("Menu",["Dashboard","Nuova operazione","Clienti","Portafoglio investimenti","Storico transazioni","Aggiornamenti stato da Wells Fargo","Messaggi","Accessi clienti"],label_visibility="collapsed")
+    page = st.radio("Menu",["Dashboard","Clienti FE","Nuova operazione","Movimenti e ricevute","Bacheca e aggiornamenti","Messaggi","Portafoglio investimenti","Accessi clienti"],label_visibility="collapsed")
     st.divider()
     st.caption("Area amministratore")
     if st.button("Esci", use_container_width=True):
@@ -1050,8 +1097,59 @@ elif page == "Nuova operazione":
     else:
         st.info("Seleziona il codice cliente.")
 
-elif page == "Clienti":
-    st.markdown('<div class="gf-title">Clienti</div>', unsafe_allow_html=True)
+elif page == "Clienti FE":
+    st.markdown('<div class="gf-title">Clienti FE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gf-sub">Crea nuovi clienti e aggiorna i dati visualizzati nella loro area FE</div>', unsafe_allow_html=True)
+
+    with st.expander("＋ Nuovo cliente FE", expanded=False):
+        with st.form("new_client_fe"):
+            nc1,nc2 = st.columns(2)
+            new_code = nc1.text_input("Codice cliente", placeholder="FE-006").strip().upper()
+            new_name = nc2.text_input("Nome e cognome")
+            nc3,nc4 = st.columns(2)
+            new_bank = nc3.text_input("Banca associata")
+            new_balance = nc4.number_input("Somma associata / saldo base", min_value=0.0, step=100.0)
+            new_status = st.selectbox("Stato cliente", ["Attivo","Sospeso","Chiuso"])
+            create_client = st.form_submit_button("CREA CLIENTE", use_container_width=True)
+        if create_client:
+            if not new_code or not new_name.strip():
+                st.error("Codice cliente e nome sono obbligatori.")
+            elif any(c["code"] == new_code for c in clients):
+                st.error("Questo codice cliente esiste già.")
+            else:
+                try:
+                    save_client_profile(new_code, new_name, new_bank, new_balance, new_status)
+                    st.success(f"Cliente {new_code} creato. Ora puoi configurarne la password in Accessi clienti.")
+                    st.rerun()
+                except Exception as e:
+                    st.error("Per creare clienti dall'app serve la tabella Supabase client_profiles.")
+                    st.caption(str(e))
+
+    st.markdown("### Modifica area FE cliente")
+    edit_code = st.selectbox(
+        "Cliente da modificare", [c["code"] for c in clients],
+        format_func=lambda x: f"{x} · {next((c['name'] for c in clients if c['code']==x),x)}",
+        key="admin_edit_fe_client"
+    )
+    ec = next(c for c in clients if c["code"] == edit_code)
+    with st.form("edit_fe_client"):
+        e1,e2 = st.columns(2)
+        e_name = e1.text_input("Nome e cognome", value=ec["name"])
+        e_bank = e2.text_input("Banca associata", value=ec["bank"])
+        e3,e4 = st.columns(2)
+        e_balance = e3.number_input("Somma associata / saldo base", min_value=0.0, value=float(ec["balance"]), step=100.0)
+        e_status = e4.selectbox("Stato", ["Attivo","Sospeso","Chiuso"],
+                                index=["Attivo","Sospeso","Chiuso"].index(ec["status"]) if ec["status"] in ["Attivo","Sospeso","Chiuso"] else 0)
+        save_fe = st.form_submit_button("SALVA DATI FE", use_container_width=True)
+    if save_fe:
+        try:
+            save_client_profile(edit_code, e_name, e_bank, e_balance, e_status)
+            st.success("Area FE aggiornata.")
+            st.rerun()
+        except Exception as e:
+            st.error("Per modificare i clienti dall'app serve la tabella Supabase client_profiles.")
+            st.caption(str(e))
+
     rows=[]
     for c in clients:
         cops=[o for o in ops if o.get("client_code")==c["code"]]
@@ -1116,8 +1214,8 @@ elif page == "Portafoglio investimenti":
             st.success(f"Portafoglio {pcode} aggiornato.")
             st.rerun()
 
-elif page == "Storico transazioni":
-    st.markdown('<div class="gf-title">Storico transazioni</div>', unsafe_allow_html=True)
+elif page == "Movimenti e ricevute":
+    st.markdown('<div class="gf-title">Movimenti e ricevute</div>', unsafe_allow_html=True)
     st.markdown('<div class="gf-sub">Elenco delle operazioni registrate e concluse</div>', unsafe_allow_html=True)
 
     if ops:
@@ -1191,9 +1289,10 @@ elif page == "Storico transazioni":
     else:
         st.info("Non risultano transazioni registrate.")
 
-elif page == "Aggiornamenti stato da Wells Fargo":
-    st.markdown('<div class="gf-title">Aggiornamenti stato da Wells Fargo</div>', unsafe_allow_html=True)
+elif page == "Bacheca e aggiornamenti":
+    st.markdown('<div class="gf-title">Bacheca e aggiornamenti</div>', unsafe_allow_html=True)
     st.caption("Registro delle comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente.")
+    st.info("Da qui aggiorni la Bacheca FE delle singole operazioni. Gli aggiornamenti restano visibili anche nelle relative ricevute PDF.")
 
     if not ops:
         st.info("Non risultano operazioni registrate.")
@@ -1250,8 +1349,26 @@ elif page == "Aggiornamenti stato da Wells Fargo":
             st.info("Nessun aggiornamento ancora registrato.")
 
 elif page == "Messaggi":
-    st.markdown('<div class="gf-title">Messaggi clienti</div>', unsafe_allow_html=True)
-    st.markdown('<div class="gf-sub">Apri una conversazione FE e rispondi al cliente</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gf-title">Centro messaggi</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gf-sub">Conversazioni FE e messaggi dei clienti da gestire</div>', unsafe_allow_html=True)
+
+    inbox = []
+    for c in clients:
+        try:
+            cm = get_messages(c["code"])
+        except Exception:
+            cm = []
+        if cm:
+            last = cm[-1]
+            inbox.append({
+                "Cliente": c["name"], "Codice": c["code"],
+                "Ultimo messaggio": last.get("message","")[:100],
+                "Da": "Cliente" if last.get("sender")=="client" else "Amministrazione",
+                "Data": pretty_dt(last.get("created_at"))
+            })
+    if inbox:
+        st.markdown("### Posta recente")
+        st.dataframe(inbox, use_container_width=True, hide_index=True)
 
     message_code = st.selectbox(
         "Cliente",
