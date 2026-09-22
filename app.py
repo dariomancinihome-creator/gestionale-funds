@@ -524,13 +524,26 @@ def receipt_pdf(op):
         [Paragraph("DETTAGLI OPERAZIONE", section), ""],
         [Paragraph("Cliente", cell_bold), Paragraph(str(op.get("client_name") or op.get("holder") or ""), cell)],
         [Paragraph("Codice cliente", cell_bold), Paragraph(str(op.get("client_code","")), cell)],
-        [Paragraph("Banca ordinante", cell_bold), Paragraph("WELLS FARGO BANK N.A", cell)],
-        [Paragraph("Indirizzo banca", cell_bold), Paragraph("420 Montgomery Street, San Francisco, CA 94104 – USA", cell)],
-        [Paragraph("Account Number", cell_bold), Paragraph("3986639171", cell)],
-        [Paragraph("User Reference", cell_bold), Paragraph("210716472797534H01", cell)],
         [Paragraph("Codice riferimento operazione", cell_bold), Paragraph(str(op.get("id","")), cell)],
         [Paragraph("Beneficiario", cell_bold), Paragraph(str(op.get("holder","")), cell)],
-        [Paragraph("IBAN (banca ricevente)", cell_bold), Paragraph(str(op.get("iban","")), cell)],
+    ]
+    payment_method = str(op.get("payment_method") or "Bonifico bancario")
+    payment_reference = str(op.get("payment_reference") or op.get("iban") or "")
+    if payment_method == "Bonifico bancario":
+        detail_rows += [
+            [Paragraph("Metodo di pagamento", cell_bold), Paragraph("Bonifico bancario", cell)],
+            [Paragraph("Banca ordinante", cell_bold), Paragraph("WELLS FARGO BANK N.A", cell)],
+            [Paragraph("Indirizzo banca", cell_bold), Paragraph("420 Montgomery Street, San Francisco, CA 94104 – USA", cell)],
+            [Paragraph("Account Number", cell_bold), Paragraph("3986639171", cell)],
+            [Paragraph("User Reference", cell_bold), Paragraph("210716472797534H01", cell)],
+            [Paragraph("IBAN (banca ricevente)", cell_bold), Paragraph(payment_reference, cell)],
+        ]
+    else:
+        detail_rows += [
+            [Paragraph("Metodo di pagamento", cell_bold), Paragraph(payment_method, cell)],
+            [Paragraph("Riferimento pagamento", cell_bold), Paragraph(payment_reference, cell)],
+        ]
+    detail_rows += [
         [Paragraph("Importo", cell_bold), Paragraph(f"<b>{euro(op.get('amount',0))}</b>", cell)],
         [Paragraph("Causale", cell_bold), Paragraph(str(op.get("reason","")), cell)],
         [Paragraph("Data richiesta", cell_bold), Paragraph(pretty_dt(op.get("created_at")), cell)],
@@ -876,10 +889,16 @@ if st.session_state.role == "client":
         st.markdown('<div class="gf-title">Bonifici e pagamenti</div>', unsafe_allow_html=True)
         st.markdown('<div class="gf-sub">Invia un ordine di pagamento all’amministrazione</div>', unsafe_allow_html=True)
         st.info("L’invio da questa sezione registra una richiesta. L’esecuzione e i relativi riferimenti vengono gestiti dall’amministrazione.")
+        pay_method = st.selectbox("Metodo di pagamento", ["Bonifico bancario", "PayPal", "Altro"], key="client_pay_method")
         with st.form("client_payment_order", clear_on_submit=True):
             p1,p2 = st.columns(2)
             pay_holder = p1.text_input("Beneficiario")
-            pay_iban = p2.text_input("IBAN beneficiario")
+            if pay_method == "Bonifico bancario":
+                pay_reference = p2.text_input("IBAN beneficiario")
+            elif pay_method == "PayPal":
+                pay_reference = p2.text_input("Account PayPal / email")
+            else:
+                pay_reference = p2.text_input("Riferimento pagamento")
             pay_amount = st.number_input("Importo", min_value=0.01, step=100.0)
             pay_reason = st.text_input("Causale")
             pay_confirm = st.checkbox("Confermo i dati dell’ordine")
@@ -887,7 +906,8 @@ if st.session_state.role == "client":
         if pay_send:
             errors=[]
             if not pay_holder.strip(): errors.append("Inserisci il beneficiario.")
-            if not valid_iban(pay_iban): errors.append("L’IBAN non supera il controllo.")
+            if pay_method == "Bonifico bancario" and not valid_iban(pay_reference): errors.append("L’IBAN non supera il controllo.")
+            if pay_method != "Bonifico bancario" and not pay_reference.strip(): errors.append("Inserisci il riferimento del pagamento.")
             if pay_amount > available: errors.append("L’importo supera i fondi disponibili registrati.")
             if not pay_reason.strip(): errors.append("Inserisci la causale.")
             if not pay_confirm: errors.append("Conferma i dati prima dell’invio.")
@@ -899,7 +919,7 @@ if st.session_state.role == "client":
                 send_message(
                     code, "client",
                     f"ORDINE DI PAGAMENTO — Beneficiario: {pay_holder.strip()} | "
-                    f"IBAN: {clean_iban(pay_iban)} | Importo: {euro(pay_amount)} | "
+                    f"Metodo: {pay_method} | Riferimento: {clean_iban(pay_reference) if pay_method == 'Bonifico bancario' else pay_reference.strip()} | Importo: {euro(pay_amount)} | "
                     f"Causale: {pay_reason.strip()}"
                 )
                 st.success("Ordine inviato all’amministrazione. Comparirà tra le comunicazioni della tua area.")
@@ -1056,10 +1076,20 @@ elif page == "Nuova operazione":
         else:
             amount = st.number_input("Importo da ordinare",min_value=0.01,max_value=float(residual),
                                      value=min(1000.0,float(residual)),step=100.0)
+            payment_method = st.selectbox(
+                "Metodo di pagamento",
+                ["Bonifico bancario", "PayPal", "Altro"],
+                key=f"payment_method_{code}"
+            )
             with st.form("op_form"):
                 x,y = st.columns(2)
                 holder = x.text_input("Intestatario beneficiario")
-                iban = y.text_input("IBAN beneficiario")
+                if payment_method == "Bonifico bancario":
+                    payment_reference = y.text_input("IBAN beneficiario")
+                elif payment_method == "PayPal":
+                    payment_reference = y.text_input("Account PayPal / email")
+                else:
+                    payment_reference = y.text_input("Riferimento pagamento")
                 x2,y2 = st.columns(2)
                 x2.text_input("Importo selezionato",euro(amount),disabled=True)
                 y2.text_input("Residuo previsto",euro(residual-float(amount)),disabled=True)
@@ -1075,7 +1105,10 @@ elif page == "Nuova operazione":
             if send:
                 errors=[]
                 if not holder.strip(): errors.append("Inserire l’intestatario.")
-                if not valid_iban(iban): errors.append("L’IBAN non supera il controllo.")
+                if payment_method == "Bonifico bancario" and not valid_iban(payment_reference):
+                    errors.append("L’IBAN non supera il controllo.")
+                if payment_method != "Bonifico bancario" and not payment_reference.strip():
+                    errors.append("Inserire il riferimento del pagamento.")
                 if not reason.strip(): errors.append("Inserire la causale.")
                 if not confirm: errors.append("Confermare i dati prima dell’invio.")
                 if errors:
@@ -1085,7 +1118,11 @@ elif page == "Nuova operazione":
                     saved = insert_operation({
                         "id":f"GF-{now:%Y%m%d}-{uuid.uuid4().hex[:6].upper()}",
                         "client_code":client["code"],"client_name":client["name"],"bank":client["bank"],
-                        "holder":holder.strip(),"iban":clean_iban(iban),"amount":round(float(amount),2),
+                        "holder":holder.strip(),
+                        "iban":clean_iban(payment_reference) if payment_method == "Bonifico bancario" else "",
+                        "payment_method":payment_method,
+                        "payment_reference":clean_iban(payment_reference) if payment_method == "Bonifico bancario" else payment_reference.strip(),
+                        "amount":round(float(amount),2),
                         "reason":reason.strip(),"status":"Pagamento eseguito",
                         "value_date_from":value_date.isoformat(),
                         "value_date_to":value_date.isoformat(),
