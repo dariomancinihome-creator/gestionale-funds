@@ -420,6 +420,36 @@ def position(client, ops):
                 due_dates.append(d)
     return associated, ordered, residual, open_ops, min(due_dates) if due_dates else None
 
+def portfolio_pdf(client, portfolio):
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=42, leftMargin=42, topMargin=42, bottomMargin=42)
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("pTitle", parent=styles["Heading1"], fontSize=22, leading=26, textColor=colors.HexColor("#0B3764"))
+    cell = ParagraphStyle("pCell", parent=styles["Normal"], fontSize=9.5, leading=12)
+    bold = ParagraphStyle("pBold", parent=cell, fontName="Helvetica-Bold", textColor=colors.HexColor("#0B3764"))
+    note = ParagraphStyle("pNote", parent=styles["Normal"], fontSize=8.5, leading=12, textColor=colors.HexColor("#60758A"))
+    invested=float(portfolio.get("initial_capital",0) or 0)
+    available=float(portfolio.get("available_funds",0) or 0)
+    total=invested+available
+    story=[Paragraph("VIL PRIVATE",title), Paragraph("Situazione riepilogativa del portafoglio",cell),
+           Spacer(1,12), Paragraph(f"<b>Cliente:</b> {client.get('name','')} &nbsp;&nbsp; <b>Codice:</b> {client.get('code','')}",cell), Spacer(1,12)]
+    rows=[
+      [Paragraph("Data documento",bold),Paragraph(datetime.now(ROME).strftime("%d/%m/%Y"),cell)],
+      [Paragraph("Asset",bold),Paragraph(str(portfolio.get("asset","") or "—"),cell)],
+      [Paragraph("Capitale iniziale",bold),Paragraph(euro(invested),cell)],
+      [Paragraph("Fondi disponibili",bold),Paragraph(euro(available),cell)],
+      [Paragraph("Totale portafoglio",bold),Paragraph(euro(total),cell)],
+      [Paragraph("Rendita",bold),Paragraph(euro(portfolio.get("return_value",0)),cell)],
+      [Paragraph("Quota versamento a debito",bold),Paragraph(euro(portfolio.get("debt_payment",0)),cell)],
+      [Paragraph("Data scadenza versamento",bold),Paragraph(pretty_date(portfolio.get("payment_due_date")),cell)],
+      [Paragraph("Prossima data versamento",bold),Paragraph(pretty_date(portfolio.get("next_payment_date")),cell)]
+    ]
+    t=Table(rows,colWidths=[180,330])
+    t.setStyle(TableStyle([("BACKGROUND",(0,0),(0,-1),colors.HexColor("#EEF4FA")),("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#D6E1EC")),
+                           ("VALIGN",(0,0),(-1,-1),"TOP"),("PADDING",(0,0),(-1,-1),8)]))
+    story += [t, Spacer(1,14), Paragraph("Situazione riepilogativa generata sulla base dei dati registrati in VIL Private alla data indicata. Il documento ha funzione informativa e non sostituisce rendicontazioni, estratti conto o documentazione ufficiale dell’intermediario.",note)]
+    doc.build(story); buf.seek(0); return buf.getvalue()
+
 def receipt_pdf(op):
     buf = BytesIO()
     doc = SimpleDocTemplate(
@@ -1012,6 +1042,10 @@ if st.session_state.role == "client":
         st.markdown(f"**Asset:** {portfolio.get('asset','')}")
         st.markdown(f"**Data scadenza versamento:** {pretty_date(portfolio.get('payment_due_date'))}")
         st.markdown(f"**Prossima data versamento:** {pretty_date(portfolio.get('next_payment_date'))}")
+        st.divider()
+        st.download_button("SCARICA SITUAZIONE PORTAFOGLIO PDF", data=portfolio_pdf(client, portfolio),
+            file_name=f"portafoglio_{code}_{datetime.now(ROME).strftime('%Y%m%d')}.pdf",
+            mime="application/pdf", use_container_width=True, key="client_portfolio_pdf")
 
     st.stop()
 
@@ -1197,6 +1231,21 @@ elif page == "Clienti FE":
     st.dataframe(rows,use_container_width=True,hide_index=True)
 
 elif page == "Portafoglio investimenti":
+    st.markdown("### Esporta situazione portafoglio")
+    pdf_code = st.selectbox("Cliente per PDF", [""]+[c["code"] for c in clients],
+        format_func=lambda x: "Seleziona" if not x else f"{x} · {next((c['name'] for c in clients if c['code']==x),x)}",
+        key="admin_portfolio_pdf_client")
+    if pdf_code:
+        pdf_client=next(c for c in clients if c["code"]==pdf_code)
+        try: pdf_port=get_portfolio(pdf_code)
+        except Exception: pdf_port=None
+        if pdf_port:
+            st.download_button("SCARICA SITUAZIONE PORTAFOGLIO PDF", data=portfolio_pdf(pdf_client,pdf_port),
+                file_name=f"portafoglio_{pdf_code}_{datetime.now(ROME).strftime('%Y%m%d')}.pdf",
+                mime="application/pdf", use_container_width=True, key=f"admin_portfolio_pdf_{pdf_code}")
+        else:
+            st.info("Per questo cliente non risulta un portafoglio registrato.")
+    st.divider()
     st.markdown('<div class="gf-title">Portafoglio investimenti</div>', unsafe_allow_html=True)
     st.markdown('<div class="gf-sub">Dati compilabili esclusivamente dall’amministratore</div>', unsafe_allow_html=True)
 
