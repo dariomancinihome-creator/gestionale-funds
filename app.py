@@ -962,29 +962,25 @@ if st.session_state.role == "client":
         st.markdown("""
         <div class="vil-notice">
           <div class="vil-notice-kicker">Comunicazione ufficiale · 10 ottobre 2026</div>
-          <div class="vil-notice-title">Migrazione VIL Private → ROOSWICK dal 12 ottobre 2026</div>
+          <div class="vil-notice-title">Migrazione da VIL Private a ROOSWICK · 12 ottobre 2026</div>
           <div class="vil-muted">
-            A partire dal <b>12 ottobre 2026</b>, VIL Private avvierà la cessazione
-            della propria operatività e la migrazione alla nuova piattaforma digitale
-            <b>ROOSWICK</b>.<br><br>
-            <b>Come accedere:</b> quando sarà comunicato il collegamento ufficiale,
-            ciascun utente dovrà registrarsi autonomamente con il proprio indirizzo
-            email, scegliere una password personale e completare la verifica
-            dell'account secondo le istruzioni disponibili.<br><br>
-            <b>Trasferimento della posizione:</b> dopo la verifica dell'identità,
-            l'amministrazione assocerà manualmente il nuovo account alla posizione
-            precedentemente registrata su VIL Private. Una volta conclusa la
-            riconciliazione, saranno consultabili le informazioni aggiornate,
-            i movimenti e i documenti disponibili. La registrazione non comporta
-            un trasferimento automatico.<br><br>
-            <b>Continuità delle operazioni:</b> la migrazione informatica non modifica
-            importi, condizioni o scadenze delle operazioni già registrate e non
-            costituisce una nuova disposizione di pagamento. Le tempistiche effettive
-            di esecuzione e accredito restano soggette alle verifiche e alle
-            comunicazioni degli intermediari coinvolti.<br><br>
-            Il collegamento alla nuova piattaforma e le istruzioni operative saranno
-            comunicati attraverso i canali ufficiali. Non comunicare mai la propria
-            password all'amministrazione o a terzi.
+            Dal <b>12 ottobre 2026</b> VIL Private avvierà la cessazione della propria operatività
+            e la migrazione alla nuova piattaforma digitale <b>ROOSWICK</b>.<br><br>
+            <b>Nuova registrazione:</b> quando sarà comunicato il collegamento ufficiale,
+            ogni utente dovrà registrarsi autonomamente con il proprio indirizzo email,
+            scegliere una password personale e completare la verifica dell'account.<br><br>
+            <b>Trasferimento della posizione:</b> dopo la verifica dell'identità del titolare,
+            l'amministrazione assocerà manualmente la posizione VIL Private al nuovo account.
+            Al termine della riconciliazione saranno consultabili posizione aggiornata,
+            movimenti e documentazione disponibile. La sola registrazione non comporta
+            l'immediato trasferimento dei dati.<br><br>
+            <b>Continuità delle operazioni:</b> la migrazione non modifica le condizioni,
+            gli importi o le scadenze delle operazioni già registrate e non costituisce
+            una nuova disposizione di pagamento. Il trasferimento tecnico non introduce
+            di per sé ritardi; le tempistiche effettive di esecuzione e accredito restano
+            soggette alle verifiche e agli intermediari coinvolti.<br><br>
+            Il collegamento alla nuova piattaforma e ulteriori istruzioni saranno
+            comunicati tramite i canali ufficiali.
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1393,6 +1389,7 @@ elif page == "Movimenti e ricevute":
 elif page == "Bacheca e aggiornamenti":
     st.markdown('<div class="gf-title">Bacheca e aggiornamenti</div>', unsafe_allow_html=True)
     st.caption("Registro delle comunicazioni relative allo stato dell’operazione tra banca inviante e banca ricevente.")
+    st.info("COMUNICAZIONE MIGRAZIONE · Dal 12 ottobre 2026 VIL Private avvia la migrazione a ROOSWICK. Gli utenti dovranno registrarsi autonomamente e completare la verifica; l’amministrazione assocerà manualmente le posizioni dopo il controllo dell’identità. La migrazione non modifica importi, condizioni o scadenze delle operazioni registrate e non introduce di per sé ritardi di esecuzione.")
     st.info("Da qui aggiorni la Bacheca FE delle singole operazioni. Gli aggiornamenti restano visibili anche nelle relative ricevute PDF.")
 
     if not ops:
