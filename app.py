@@ -20,18 +20,36 @@ LOAN_STATES = ["Deliberata", "Documenti in verifica", "Pronta per erogazione", "
 HOLIDAYS = set()  # Inserire YYYY-MM-DD delle festività applicabili alla sede del finanziatore.
 
 st.markdown("""<style>
-.stApp{background:#f4f7fb;color:#132a44}
-.block-container{padding-top:1.4rem;max-width:1230px}
-h1,h2,h3{color:#142d49!important}
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#10243b,#193b5a)}
-[data-testid="stSidebar"] *{color:#f9f9f9}
-[data-testid="stMetric"]{background:white;padding:16px;border:1px solid #dde5ed;border-radius:12px}
-.stButton>button[kind="primary"],.stFormSubmitButton>button[kind="primary"]{background:#143553;border-color:#143553}
-.cdbrand{font-weight:900;letter-spacing:.12em;font-size:1.6rem;color:#cfae74}
-.cdsub{color:#7d8d9d;font-size:.9rem}
+:root {--navy:#10243b; --navy2:#173b58; --gold:#c8a96b; --ink:#172d46; --muted:#748396; --line:#e0e7ef;}
+.stApp {background:radial-gradient(circle at 93% 0%,#e3ecf3 0%,#f5f7fb 42%,#f5f7fb 100%);color:var(--ink);}
+.block-container {padding-top:2rem; padding-bottom:3rem; max-width:1200px;}
+[data-testid="stHeader"] {background:transparent;}
+h1,h2,h3 {color:var(--navy)!important;letter-spacing:-.025em;}
+h1 {font-weight:800!important;}
+[data-testid="stSidebar"] {background:linear-gradient(160deg,#0c2035 0%,#173952 100%);}
+[data-testid="stSidebar"] * {color:#f7f8fa;}
+[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){background:rgba(203,173,112,.15);border-radius:9px;}
+[data-testid="stMetric"] {background:#fff;padding:16px 19px;border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:14px;box-shadow:0 8px 24px rgba(16,36,59,.03);}
+.stButton>button[kind="primary"],.stFormSubmitButton>button[kind="primary"]{background:var(--navy);border:1px solid var(--navy);color:white;border-radius:10px;font-weight:700;min-height:44px;}
+.stButton>button[kind="primary"]:hover,.stFormSubmitButton>button[kind="primary"]:hover{background:#244968;border-color:#244968;color:#fff;}
+.stFormSubmitButton>button,.stButton>button{border-radius:10px;min-height:42px;}
+[data-testid="stForm"] {background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px 24px 18px;box-shadow:0 14px 40px rgba(16,36,59,.055);}
+[data-baseweb="input"]>div,[data-baseweb="select"]>div,textarea{background:#fff!important;border-radius:9px!important;}
+button[data-baseweb="tab"] {font-weight:700;padding:14px 20px;color:#64758b;}
+button[data-baseweb="tab"][aria-selected="true"] {color:var(--navy)!important;}
+[data-baseweb="tab-highlight"] {background:var(--gold)!important;}
+.cdbrand {font-weight:850;letter-spacing:.09em;font-size:1.42rem;color:var(--navy);display:flex;align-items:center;gap:10px;}
+.cdbrand-mark {display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;background:var(--navy);color:var(--gold);border-radius:11px;font-weight:900;font-size:1rem;letter-spacing:0;}
+.cdsub {color:var(--muted);font-size:.87rem;letter-spacing:.015em;}
+.cd-hero {border:1px solid #d9e3ec;box-shadow:0 16px 45px rgba(16,36,59,.06);background:linear-gradient(112deg,#ffffff 0%,#f1f5f9 72%,#e8eff5 100%);padding:26px 30px 24px;border-radius:20px;margin:0 0 22px;position:relative;overflow:hidden;}
+.cd-hero:after {content:'';position:absolute;right:-70px;top:-90px;width:245px;height:245px;border-radius:50%;border:38px solid rgba(200,169,107,.13);pointer-events:none;}
+.cd-kicker{font-size:.76rem;text-transform:uppercase;letter-spacing:.14em;font-weight:800;color:#987643;margin-bottom:12px;}
+.cd-headline{font-size:clamp(1.65rem,3.3vw,2.55rem);font-weight:850;line-height:1.14;color:var(--navy);letter-spacing:-.035em;margin:6px 0 12px;max-width:740px;}
+.cd-intro{font-size:1rem;color:#65768a;line-height:1.6;max-width:670px;margin:0;}
 .cdprogress{height:19px;border-radius:20px;background:#dfe7e9;overflow:hidden}
 .cdprogressbar{height:19px;border-radius:20px;background:linear-gradient(90deg,#0f8b4c,#42bf75)}
-.cdcard{background:white;border:1px solid #dce6ee;border-radius:13px;padding:18px;margin:10px 0}
+.cdcard{background:white;border:1px solid var(--line);border-radius:13px;padding:18px;margin:10px 0}
+@media (max-width:650px) {.block-container{padding-top:1.2rem}.cd-hero{padding:22px 18px}[data-testid="stForm"]{padding:14px 12px;}}
 </style>""", unsafe_allow_html=True)
 
 if not URL or not ANON:
@@ -173,51 +191,54 @@ def ensure_session():
 
 
 def brand():
-    st.markdown('<div class="cdbrand">◆ CREDIT DESK</div>', unsafe_allow_html=True)
-    st.caption("Area riservata finanziamenti")
+    st.markdown('<div class="cdbrand"><span class="cdbrand-mark">CD</span> CREDIT DESK</div>', unsafe_allow_html=True)
+    st.markdown('<div class="cdsub">Area riservata finanziamenti</div>', unsafe_allow_html=True)
 
 
 def signup_login():
-    brand()
-    st.title("Il tuo finanziamento, sempre sotto controllo")
-    st.caption("Registrati per richiedere una soluzione oppure consulta una pratica già deliberata.")
-    login_tab, register_tab = st.tabs(["Accedi", "Registrati"])
-    with login_tab:
-        with st.form("cd_login"):
-            email = st.text_input("Email", key="cd_email")
-            password = st.text_input("Password", type="password", key="cd_pw")
-            go = st.form_submit_button("ACCEDI", type="primary", use_container_width=True)
-        if go:
-            try:
-                data = api("POST", "/auth/v1/token?grant_type=password", {"email": email.strip(), "password": password})
-                st.session_state["cd_access_token"] = data["access_token"]
-                st.session_state["cd_refresh_token"] = data["refresh_token"]
-                st.session_state["cd_user"] = data["user"]
-                load_profile()
-                st.rerun()
-            except (RuntimeError, KeyError) as ex:
-                st.error(f"Accesso non riuscito: {ex}")
-    with register_tab:
-        with st.form("cd_signup"):
-            name = st.text_input("Nome e cognome")
-            email_new = st.text_input("Email personale")
-            pw1 = st.text_input("Crea password", type="password")
-            pw2 = st.text_input("Conferma password", type="password")
-            agree = st.checkbox("Confermo di aver letto l'informativa privacy del gestore (da pubblicare prima del lancio).")
-            send = st.form_submit_button("CREA ACCOUNT", use_container_width=True)
-        if send:
-            if not name.strip() or "@" not in email_new:
-                st.warning("Inserisci nome e indirizzo email valido.")
-            elif len(pw1) < 10 or pw1 != pw2:
-                st.warning("Usa almeno 10 caratteri e verifica che le password coincidano.")
-            elif not agree:
-                st.warning("Leggi e accetta la presa visione dell'informativa privacy prima di proseguire.")
-            else:
+    st.markdown("""<div class="cd-hero"><div class="cdbrand"><span class="cdbrand-mark">CD</span> CREDIT DESK</div>
+<div class="cd-kicker" style="margin-top:26px">La tua area riservata</div>
+<div class="cd-headline">Il tuo finanziamento,<br>sempre sotto controllo.</div>
+<p class="cd-intro">Richiedi una soluzione di finanziamento, consulta le proposte e segui lo stato delle pratiche già deliberate fino all’erogazione.</p></div>""", unsafe_allow_html=True)
+    left, center, right = st.columns([1, 2.1, 1], gap="medium")
+    with center:
+        login_tab, register_tab = st.tabs(["Accedi", "Registrati"])
+        with login_tab:
+            with st.form("cd_login"):
+                email = st.text_input("Email", key="cd_email")
+                password = st.text_input("Password", type="password", key="cd_pw")
+                go = st.form_submit_button("ACCEDI", type="primary", use_container_width=True)
+            if go:
                 try:
-                    api("POST", "/auth/v1/signup", {"email": email_new.strip(), "password": pw1, "data": {"full_name": name.strip()}})
-                    st.success("Registrazione acquisita. Se richiesta, conferma l'email prima di accedere.")
-                except RuntimeError as ex:
-                    st.error(f"Registrazione non completata: {ex}")
+                    data = api("POST", "/auth/v1/token?grant_type=password", {"email": email.strip(), "password": password})
+                    st.session_state["cd_access_token"] = data["access_token"]
+                    st.session_state["cd_refresh_token"] = data["refresh_token"]
+                    st.session_state["cd_user"] = data["user"]
+                    load_profile()
+                    st.rerun()
+                except (RuntimeError, KeyError) as ex:
+                    st.error(f"Accesso non riuscito: {ex}")
+        with register_tab:
+            with st.form("cd_signup"):
+                name = st.text_input("Nome e cognome")
+                email_new = st.text_input("Email personale")
+                pw1 = st.text_input("Crea password", type="password")
+                pw2 = st.text_input("Conferma password", type="password")
+                agree = st.checkbox("Confermo di aver letto l'informativa privacy del gestore (da pubblicare prima del lancio).")
+                send = st.form_submit_button("CREA ACCOUNT", use_container_width=True)
+            if send:
+                if not name.strip() or "@" not in email_new:
+                    st.warning("Inserisci nome e indirizzo email valido.")
+                elif len(pw1) < 10 or pw1 != pw2:
+                    st.warning("Usa almeno 10 caratteri e verifica che le password coincidano.")
+                elif not agree:
+                    st.warning("Leggi e accetta la presa visione dell'informativa privacy prima di proseguire.")
+                else:
+                    try:
+                        api("POST", "/auth/v1/signup", {"email": email_new.strip(), "password": pw1, "data": {"full_name": name.strip()}})
+                        st.success("Registrazione acquisita. Se richiesta, conferma l'email prima di accedere.")
+                    except RuntimeError as ex:
+                        st.error(f"Registrazione non completata: {ex}")
     st.stop()
 
 
