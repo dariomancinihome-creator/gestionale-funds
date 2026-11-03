@@ -14,6 +14,7 @@ st.set_page_config(page_title="CREDIT DESK", page_icon="🏦", layout="wide")
 URL = st.secrets.get("SUPABASE_URL", "").rstrip("/")
 ANON = st.secrets.get("SUPABASE_PUBLISHABLE_KEY", "") or st.secrets.get("SUPABASE_ANON_KEY", "")
 FERNET_KEY = st.secrets.get("CREDIT_DESK_FERNET_KEY", "")
+PRIVACY_URL = st.secrets.get("CREDIT_DESK_PRIVACY_URL", "").strip()
 TZ = ZoneInfo("Europe/Madrid")
 REQUEST_STATES = ["Ricevuta", "In valutazione", "Soluzione disponibile", "Archiviata"]
 LOAN_STATES = ["Deliberata", "Documenti in verifica", "Pronta per erogazione", "Erogazione disposta", "Accredito confermato", "Sospesa", "Annullata"]
@@ -224,8 +225,14 @@ def signup_login():
                 email_new = st.text_input("Email personale")
                 pw1 = st.text_input("Crea password", type="password")
                 pw2 = st.text_input("Conferma password", type="password")
-                agree = st.checkbox("Confermo di aver letto l'informativa privacy del gestore (da pubblicare prima del lancio).")
-                send = st.form_submit_button("CREA ACCOUNT", use_container_width=True)
+                privacy_ready = PRIVACY_URL.startswith(("https://", "http://"))
+                if privacy_ready:
+                    st.markdown(f"[Leggi l’informativa sul trattamento dei dati personali]({PRIVACY_URL})")
+                    agree = st.checkbox("Dichiaro di aver preso visione dell’informativa privacy.")
+                else:
+                    st.warning("Registrazione temporaneamente non disponibile: informativa privacy da pubblicare.")
+                    agree = False
+                send = st.form_submit_button("CREA ACCOUNT", use_container_width=True, disabled=not privacy_ready)
             if send:
                 if not name.strip() or "@" not in email_new:
                     st.warning("Inserisci nome e indirizzo email valido.")
