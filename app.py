@@ -1,3 +1,4 @@
+# CREDIT DESK 1.0.1 - correzione interfaccia coordinate per l'accredito.
 """CREDIT DESK 1.0 — applicazione Streamlit, Supabase Auth + RLS.
 Nessuna funzione bancaria: le informazioni sono inserite dall'amministrazione.
 """
@@ -274,34 +275,54 @@ def load_bank(loan_id):
 
 
 def bank_client(loan):
+    """Coordinate per l'accredito: primo IBAN consentito anche con erogazione disposta.
+
+    La modifica di un IBAN esistente richiede autorizzazione amministrativa.
+    Il salvataggio continua a usare la RPC Supabase e la cifratura Fernet.
+    """
     st.subheader("Coordinate per l'accredito")
+    st.write("Per comunicare il conto sul quale desideri ricevere il finanziamento, "
+             "inserisci l'intestatario e l'IBAN, controlla che siano corretti e premi **INVIA COORDINATE**.")
     bank = load_bank(loan["id"])
+    change_allowed = bool(loan.get("bank_change_allowed"))
+    change_requested = bool(loan.get("bank_change_requested"))
+    status = loan.get("status", "")
+
     if bank:
-        st.info(f"IBAN: {bank['iban_masked']} · Intestatario: {bank['holder']} · Stato: {bank['status']}")
-        if loan["bank_change_allowed"]:
+        st.info(f"IBAN registrato: {bank['iban_masked']} · Intestatario: {bank['holder']} · Stato verifica: {bank['status']}")
+        if change_allowed:
             st.success("L'amministrazione ha autorizzato la sostituzione delle coordinate.")
-        elif loan["bank_change_requested"]:
-            st.warning("Richiesta di modifica inviata. Attendi autorizzazione.")
-        elif loan["status"] not in ("Erogazione disposta", "Accredito confermato", "Annullata"):
+        elif change_requested:
+            st.warning("Hai già richiesto la modifica. Attendi l'autorizzazione dell'amministrazione.")
+        elif status not in ("Accredito confermato", "Annullata"):
             if st.button("Richiedi modifica IBAN", key=f"change_{loan['id']}"):
                 try:
                     rpc("cd_request_iban_change", {"p_loan_id": loan["id"]})
                     st.success("Richiesta registrata.")
                     st.rerun()
                 except RuntimeError as ex:
-                    st.error(str(ex))
-    if loan["status"] in ("Erogazione disposta", "Accredito confermato", "Annullata"):
+                    st.error(f"Impossibile richiedere la modifica: {ex}")
+
+    if status in ("Accredito confermato", "Annullata"):
+        st.caption("La pratica è chiusa o annullata: per eventuali variazioni contatta l'assistenza.")
         return
-    if bank and not loan["bank_change_allowed"]:
+    if bank and not change_allowed:
+        st.caption("Le coordinate già registrate non possono essere sostituite senza autorizzazione amministrativa.")
         return
+
+    if not bank and status == "Erogazione disposta":
+        st.warning("Non risultano ancora coordinate bancarie registrate. Puoi comunicare il primo IBAN qui sotto. "
+                   "La comunicazione non conferma l'avvenuta erogazione.")
+
     with st.form(f"bank_form_{loan['id']}"):
-        holder = st.text_input("Intestatario del conto", help="Deve rispettare le condizioni comunicate dal finanziatore.")
-        iban = st.text_input("IBAN per l'accredito")
-        confirmation = st.checkbox("Confermo la correttezza delle coordinate e la mia autorizzazione a comunicarle ai fini dell'accredito.")
+        holder = st.text_input("Intestatario del conto", help="Nome e cognome riportati sul conto corrente.")
+        iban = st.text_input("IBAN per l'accredito", placeholder="IT00 0000 0000 0000 0000 0000 000")
+        confirmation = st.checkbox("Confermo la correttezza delle coordinate e la mia autorizzazione "
+                                   "a comunicarle ai fini dell'accredito.")
         submitted = st.form_submit_button("INVIA COORDINATE", type="primary")
     if submitted:
         if not iban_valid(iban):
-            st.error("IBAN formalmente non valido.")
+            st.error("IBAN formalmente non valido. Controlla tutte le lettere e le cifre.")
         elif not holder.strip() or not confirmation:
             st.error("Compila l'intestatario e conferma i dati.")
         else:
@@ -331,7 +352,10 @@ def customer_app():
             st.info("Nessun finanziamento deliberato associato a questo account. Se hai firmato una proposta, l'amministrazione deve collegarla al tuo profilo.")
             return
         loan = st.selectbox("Finanziamento", loans, format_func=lambda x: x["reference"] + " · " + x["lender"])
-        st.success(f"Stato registrato: {loan['status']}") if loan["status"] == "Accredito confermato" else st.info(f"Stato amministrativo: {loan['status']}")
+        if loan["status"] == "Accredito confermato":
+            st.success(f"Stato registrato: {loan['status']}")
+        else:
+            st.info(f"Stato amministrativo: {loan['status']}")
         c1,c2,c3 = st.columns(3)
         c1.metric("Importo deliberato", money(loan["amount"]))
         c2.metric("Rata mensile", money(loan["installment"]))
